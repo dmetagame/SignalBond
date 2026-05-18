@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx \"tests/**/*.test.ts\"",
-    "compile:contracts": "solcjs --optimize --optimize-runs 200 --bin --abi -o build/contracts contracts/SignalBond.sol"
+    "compile:contracts": "solcjs --optimize --optimize-runs 200 --bin --abi -o build/contracts contracts/MockUSDC.sol contracts/SignalBond.sol",
+    "deploy:demo": "tsx scripts/deploy-demo.ts"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

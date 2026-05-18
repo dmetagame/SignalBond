@@ -16,6 +16,8 @@ npm install
 npm run dev
 ```
 
+Production: https://signalbond.vercel.app
+
 ## Validate
 
 ```bash
@@ -24,6 +26,25 @@ npm run test
 npm run build
 npm run compile:contracts
 ```
+
+## Arc Demo Deployment
+
+Compile and deploy a demo `MockUSDC` plus `SignalBond` contract:
+
+```bash
+npm run compile:contracts
+DEPLOYER_PRIVATE_KEY=0x... npm run deploy:demo
+```
+
+The deploy script prints the frontend environment values:
+
+```bash
+NEXT_PUBLIC_DEMO_USDC_ADDRESS=0x...
+NEXT_PUBLIC_SIGNALBOND_ADDRESS=0x...
+NEXT_PUBLIC_ARC_CHAIN_ID=...
+```
+
+Set those in Vercel, redeploy, and the dashboard switches from local simulation to wallet-backed signal publishing.
 
 ## Hackathon Positioning
 

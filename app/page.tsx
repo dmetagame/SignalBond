@@ -14,17 +14,32 @@ import {
   RadioTower,
   ShieldCheck,
   Sparkles,
-  Target,
   TimerReset,
   Trophy,
   WalletCards,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { signalBondAbi } from "./lib/contract";
+import { createWalletClient, custom, keccak256, parseUnits, stringToHex, type Address, type Hex } from "viem";
+import {
+  arcCanteen,
+  contractsConfigured,
+  demoUsdcAddress,
+  erc20Abi,
+  signalBondAbi,
+  signalBondAddress,
+} from "./lib/contract";
 import { agents as seedAgents, marketTape, signals as seedSignals } from "./lib/seed";
 import { calculateScore, formatBps, formatUsdc, settleAgent } from "./lib/reputation";
 import type { Agent, Direction, Signal } from "./lib/types";
+
+declare global {
+  interface Window {
+    ethereum?: {
+      request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+    };
+  }
+}
 
 const signalScenarios: Array<{
   agentId: string;
@@ -97,6 +112,10 @@ export default function Home() {
   const [signals, setSignals] = useState<Signal[]>(seedSignals);
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [selectedAgentId, setSelectedAgentId] = useState(seedAgents[0].id);
+  const [walletAddress, setWalletAddress] = useState<Address>();
+  const [walletError, setWalletError] = useState<string>();
+  const [lastOnchainTx, setLastOnchainTx] = useState<Hex>();
+  const [onchainBusy, setOnchainBusy] = useState(false);
 
   const rankedAgents = useMemo(
     () =>
@@ -116,7 +135,20 @@ export default function Home() {
   const totalStake = signals.reduce((sum, signal) => sum + signal.stakeUsdc, 0);
   const topScore = calculateScore(rankedAgents[0]).reputation;
 
-  function runAgentCycle() {
+  async function connectWallet() {
+    setWalletError(undefined);
+    if (!window.ethereum) {
+      setWalletError("No injected wallet found. Install a browser wallet to publish onchain.");
+      return;
+    }
+
+    const accounts = (await window.ethereum.request({
+      method: "eth_requestAccounts",
+    })) as Address[];
+    setWalletAddress(accounts[0]);
+  }
+
+  async function runAgentCycle() {
     const scenario = signalScenarios[scenarioIndex % signalScenarios.length];
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -132,7 +164,29 @@ export default function Home() {
       txHash: pseudoHash(`${nextId}:${scenario.market}:tx`),
     };
 
-    setSignals((current) => [nextSignal, ...current]);
+    let onchainTxHash: Hex | undefined;
+
+    if (contractsConfigured) {
+      if (!walletAddress) {
+        setWalletError("Connect wallet to publish this signal on Arc. Simulation still updated locally.");
+      } else {
+        setOnchainBusy(true);
+        setWalletError(undefined);
+        try {
+          onchainTxHash = await publishSignalOnchain(nextSignal, walletAddress);
+          setLastOnchainTx(onchainTxHash);
+        } catch (error) {
+          setWalletError(normalizeError(error));
+        } finally {
+          setOnchainBusy(false);
+        }
+      }
+    }
+
+    setSignals((current) => [
+      { ...nextSignal, txHash: onchainTxHash ?? nextSignal.txHash },
+      ...current,
+    ]);
     setSelectedAgentId(scenario.agentId);
     setScenarioIndex((value) => value + 1);
   }
@@ -173,7 +227,12 @@ export default function Home() {
 
   return (
     <main className="terminal-shell">
-      <TopBar activeSignals={activeSignals.length} totalStake={totalStake} />
+      <TopBar
+        activeSignals={activeSignals.length}
+        onConnect={connectWallet}
+        totalStake={totalStake}
+        walletAddress={walletAddress}
+      />
 
       <section className="tape" aria-label="Market tape">
         {marketTape.map((item) => (
@@ -229,15 +288,38 @@ export default function Home() {
               <h1>Accountable market agents with USDC at stake.</h1>
             </div>
             <div className="hero-actions">
-              <button className="primary-action" onClick={runAgentCycle} type="button">
+              <button
+                className="primary-action"
+                disabled={onchainBusy}
+                onClick={runAgentCycle}
+                type="button"
+              >
                 <Play aria-hidden="true" />
-                Run Agent Cycle
+                {onchainBusy ? "Publishing..." : "Run Agent Cycle"}
               </button>
               <button className="secondary-action" onClick={resolveSignal} type="button">
                 <ShieldCheck aria-hidden="true" />
                 Resolve Signal
               </button>
             </div>
+          </div>
+
+          <div className="mode-strip">
+            <span className={contractsConfigured ? "mode live" : "mode sim"}>
+              {contractsConfigured ? "Onchain mode ready" : "Simulation mode"}
+            </span>
+            <span>
+              SignalBond: <code>{signalBondAddress ? shortHash(signalBondAddress) : "not configured"}</code>
+            </span>
+            <span>
+              Demo USDC: <code>{demoUsdcAddress ? shortHash(demoUsdcAddress) : "not configured"}</code>
+            </span>
+            {lastOnchainTx ? (
+              <span>
+                Last tx: <code>{shortHash(lastOnchainTx)}</code>
+              </span>
+            ) : null}
+            {walletError ? <strong>{walletError}</strong> : null}
           </div>
 
           <div className="metric-grid">
@@ -345,9 +427,9 @@ export default function Home() {
             />
             <SettlementItem
               icon={<BadgeCheck />}
-              label="Contract ABI"
-              value={`${signalBondAbi.length} methods`}
-              detail="create, resolve, score"
+              label="Contract mode"
+              value={contractsConfigured ? "Ready" : "Sim only"}
+              detail={contractsConfigured ? "Env addresses configured" : "Set Vercel envs after deploy"}
             />
             <SettlementItem
               icon={<Activity />}
@@ -384,10 +466,14 @@ export default function Home() {
 
 function TopBar({
   activeSignals,
+  onConnect,
   totalStake,
+  walletAddress,
 }: {
   activeSignals: number;
+  onConnect: () => void;
   totalStake: number;
+  walletAddress?: Address;
 }) {
   return (
     <header className="topbar">
@@ -405,9 +491,9 @@ function TopBar({
         <strong>{activeSignals} live</strong>
         <strong>{formatUsdc(totalStake)} staked</strong>
       </div>
-      <button className="wallet-button" type="button">
+      <button className="wallet-button" onClick={onConnect} type="button">
         <WalletCards aria-hidden="true" />
-        Connect
+        {walletAddress ? shortHash(walletAddress) : "Connect"}
       </button>
     </header>
   );
@@ -493,6 +579,59 @@ function isBullish(direction: Direction): boolean {
   return direction === "LONG" || direction === "YES";
 }
 
+async function publishSignalOnchain(signal: Signal, account: Address): Promise<Hex> {
+  if (!window.ethereum) {
+    throw new Error("No injected wallet found.");
+  }
+
+  if (!signalBondAddress || !demoUsdcAddress) {
+    throw new Error("Contract addresses are not configured.");
+  }
+
+  const walletClient = createWalletClient({
+    account,
+    chain: arcCanteen,
+    transport: custom(window.ethereum),
+  });
+  const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
+
+  await walletClient.writeContract({
+    address: demoUsdcAddress,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [signalBondAddress, stakeAmount],
+  });
+
+  return walletClient.writeContract({
+    address: signalBondAddress,
+    abi: signalBondAbi,
+    functionName: "createSignal",
+    args: [
+      keccak256(stringToHex(signal.agentId)),
+      signal.market,
+      directionToContract(signal.direction),
+      signal.confidenceBps,
+      stakeAmount,
+      BigInt(Math.floor(new Date(signal.expiresAt).getTime() / 1000)),
+      signal.sourceHash,
+      keccak256(stringToHex(signal.reasoning)),
+    ],
+  });
+}
+
+function directionToContract(direction: Direction): number {
+  switch (direction) {
+    case "LONG":
+      return 0;
+    case "SHORT":
+      return 1;
+    case "YES":
+      return 2;
+    case "NO":
+      return 3;
+  }
+}
+
 function pseudoHash(input: string): `0x${string}` {
   let hash = 0;
   for (let index = 0; index < input.length; index += 1) {
@@ -506,4 +645,11 @@ function pseudoHash(input: string): `0x${string}` {
 function shortHash(hash?: string): string {
   if (!hash) return "0x";
   return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+}
+
+function normalizeError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return "Transaction failed.";
 }

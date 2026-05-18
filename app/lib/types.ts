@@ -36,8 +36,8 @@ export type Signal = {
   status: SignalStatus;
   pnlBps?: number;
   correct?: boolean;
-  sourceHash: string;
-  txHash: string;
+  sourceHash: `0x${string}`;
+  txHash: `0x${string}`;
   reasoning: string;
   sources: string[];
 };
@@ -48,4 +48,10 @@ export type ScoreBreakdown = {
   calibrationScore: number;
   stakeScore: number;
   reputation: number;
+};
+
+export type WalletStatus = {
+  address?: `0x${string}`;
+  error?: string;
+  lastTx?: `0x${string}`;
 };

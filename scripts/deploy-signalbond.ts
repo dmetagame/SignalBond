@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { createWalletClient, http, parseAbi, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, parseAbi, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcCanteen } from "../app/lib/contract";
 
@@ -12,6 +12,10 @@ if (!privateKey || !stakeToken || !resolver) {
 }
 
 const account = privateKeyToAccount(privateKey);
+const publicClient = createPublicClient({
+  chain: arcCanteen,
+  transport: http(),
+});
 const client = createWalletClient({
   account,
   chain: arcCanteen,
@@ -27,4 +31,12 @@ const hash = await client.deployContract({
   args: [stakeToken, resolver],
 });
 
-console.log(JSON.stringify({ deployer: account.address, txHash: hash }, null, 2));
+const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+console.log(
+  JSON.stringify(
+    { deployer: account.address, txHash: hash, signalBond: receipt.contractAddress },
+    null,
+    2,
+  ),
+);

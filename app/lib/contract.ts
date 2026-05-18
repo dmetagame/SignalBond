@@ -1,4 +1,4 @@
-import { defineChain } from "viem";
+import { defineChain, isAddress, type Address } from "viem";
 
 export const arcCanteen = defineChain({
   id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 504_520),
@@ -14,6 +14,10 @@ export const arcCanteen = defineChain({
     },
   },
 });
+
+export const signalBondAddress = readAddress(process.env.NEXT_PUBLIC_SIGNALBOND_ADDRESS);
+export const demoUsdcAddress = readAddress(process.env.NEXT_PUBLIC_DEMO_USDC_ADDRESS);
+export const contractsConfigured = Boolean(signalBondAddress && demoUsdcAddress);
 
 export const signalBondAbi = [
   {
@@ -63,3 +67,27 @@ export const signalBondAbi = [
     ],
   },
 ] as const;
+
+export const erc20Abi = [
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
+function readAddress(value: string | undefined): Address | undefined {
+  return value && isAddress(value) ? value : undefined;
+}

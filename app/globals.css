@@ -189,6 +189,63 @@ button {
   color: var(--text);
 }
 
+.primary-action:disabled,
+.secondary-action:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.mode-strip {
+  align-items: center;
+  background: rgba(23, 27, 25, 0.74);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 42px;
+  padding: 9px 10px;
+}
+
+.mode-strip span,
+.mode-strip strong {
+  align-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-family: var(--mono);
+  font-size: 11px;
+  gap: 5px;
+  min-height: 24px;
+  padding: 4px 9px;
+}
+
+.mode-strip strong {
+  background: var(--red-soft);
+  border-color: rgba(255, 99, 112, 0.28);
+  color: #ffb4ba;
+  flex: 1 1 100%;
+  justify-content: flex-start;
+}
+
+.mode-strip .mode {
+  font-weight: 700;
+}
+
+.mode-strip .mode.live {
+  background: var(--green-soft);
+  border-color: rgba(212, 255, 62, 0.28);
+  color: var(--green);
+}
+
+.mode-strip .mode.sim {
+  background: rgba(101, 214, 255, 0.12);
+  border-color: rgba(101, 214, 255, 0.22);
+  color: var(--cyan);
+}
+
 .tape {
   display: grid;
   gap: 8px;

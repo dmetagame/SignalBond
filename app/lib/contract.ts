@@ -1,16 +1,16 @@
 import { defineChain, isAddress, type Address } from "viem";
 
 export const arcCanteen = defineChain({
-  id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 504_520),
-  name: "Arc Canteen Testnet",
+  id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 5_042_002),
+  name: "Arc Testnet",
   nativeCurrency: {
     name: "USDC",
     symbol: "USDC",
-    decimals: 6,
+    decimals: 18,
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "https://arc-node.thecanteenapp.com/rpc"],
+      http: [process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "https://rpc.testnet.arc.network"],
     },
   },
 });

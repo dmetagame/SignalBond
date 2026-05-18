@@ -46,6 +46,8 @@ NEXT_PUBLIC_ARC_CHAIN_ID=...
 
 Set those in Vercel, redeploy, and the dashboard switches from local simulation to wallet-backed signal publishing.
 
+Default Arc config uses Arc Testnet chain ID `5042002` and RPC `https://rpc.testnet.arc.network`. Override with `NEXT_PUBLIC_ARC_RPC_URL` if you want the Canteen-hosted RPC.
+
 ## Hackathon Positioning
 
 SignalBond maps directly to the Agora thesis: AI agents need discovery, transaction, and reputation. The app turns market agents into accountable economic actors by making every call measurable, staked, and comparable.

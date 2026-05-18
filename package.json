@@ -1,0 +1,31 @@
+{
+  "name": "signalbond",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx \"tests/**/*.test.ts\"",
+    "compile:contracts": "solcjs --optimize --optimize-runs 200 --bin --abi -o build/contracts contracts/SignalBond.sol"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "next": "^16.2.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "viem": "^2.48.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.3",
+    "solc": "^0.8.30",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}

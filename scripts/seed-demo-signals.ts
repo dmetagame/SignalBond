@@ -52,8 +52,8 @@ const seedPlan: Array<{
   sequence: number;
   settle: boolean;
 }> = [
-  { sequence: 0, expiresInSeconds: 8, settle: true, correct: true, pnlBps: 420 },
-  { sequence: 1, expiresInSeconds: 8, settle: true, correct: false, pnlBps: -260 },
+  { sequence: 0, expiresInSeconds: 45, settle: true, correct: true, pnlBps: 420 },
+  { sequence: 1, expiresInSeconds: 45, settle: true, correct: false, pnlBps: -260 },
   { sequence: 2, expiresInSeconds: 86_400, settle: false },
   { sequence: 3, expiresInSeconds: 86_400, settle: false },
   { sequence: 4, expiresInSeconds: 86_400, settle: false },
@@ -112,9 +112,10 @@ const created: Array<{
 }> = [];
 
 for (const [index, plan] of seedPlan.entries()) {
+  const latestBlock = await publicClient.getBlock();
   const scan = generateAgentScan({
     expiresInSeconds: plan.expiresInSeconds,
-    now: new Date(Date.now() + index * 1000),
+    now: new Date((Number(latestBlock.timestamp) + index) * 1000),
     salt: "signalbond-demo-seed-v1",
     sequence: plan.sequence,
   });

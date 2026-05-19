@@ -209,7 +209,8 @@ button {
 }
 
 .mode-strip span,
-.mode-strip strong {
+.mode-strip strong,
+.mode-refresh {
   align-items: center;
   border: 1px solid var(--line-soft);
   border-radius: 999px;
@@ -220,6 +221,21 @@ button {
   gap: 5px;
   min-height: 24px;
   padding: 4px 9px;
+}
+
+.mode-refresh {
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+
+.mode-refresh:disabled {
+  cursor: wait;
+  opacity: 0.66;
+}
+
+.mode-refresh svg {
+  height: 13px;
+  width: 13px;
 }
 
 .mode-strip strong {
@@ -485,6 +501,22 @@ button {
 
 .signal-tr:last-child {
   border-bottom: 0;
+}
+
+.signal-empty {
+  background: var(--panel-2);
+  display: grid;
+  gap: 5px;
+  padding: 18px 12px;
+}
+
+.signal-empty strong {
+  font-size: 13px;
+}
+
+.signal-empty span {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .signal-th {

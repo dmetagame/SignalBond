@@ -22,6 +22,27 @@ export const contractsConfigured = Boolean(signalBondAddress && demoUsdcAddress)
 export const signalBondAbi = [
   {
     type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "resolver",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "nextSignalId",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "createSignal",
     stateMutability: "nonpayable",
     inputs: [
@@ -46,6 +67,34 @@ export const signalBondAbi = [
       { name: "pnlBps", type: "int256" },
     ],
     outputs: [],
+  },
+  {
+    type: "function",
+    name: "getSignal",
+    stateMutability: "view",
+    inputs: [{ name: "signalId", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "id", type: "uint256" },
+          { name: "agentId", type: "bytes32" },
+          { name: "publisher", type: "address" },
+          { name: "direction", type: "uint8" },
+          { name: "market", type: "string" },
+          { name: "confidenceBps", type: "uint16" },
+          { name: "createdAt", type: "uint64" },
+          { name: "expiresAt", type: "uint64" },
+          { name: "stakeAmount", type: "uint256" },
+          { name: "sourceDataHash", type: "bytes32" },
+          { name: "explanationHash", type: "bytes32" },
+          { name: "resolved", type: "bool" },
+          { name: "correct", type: "bool" },
+          { name: "pnlBps", type: "int256" },
+        ],
+      },
+    ],
   },
   {
     type: "function",

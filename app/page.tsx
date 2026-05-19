@@ -12,6 +12,7 @@ import {
   Layers3,
   Play,
   RadioTower,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   TimerReset,
@@ -19,12 +20,10 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  createPublicClient,
   createWalletClient,
   custom,
-  http,
   keccak256,
   parseUnits,
   stringToHex,
@@ -39,6 +38,12 @@ import {
   signalBondAbi,
   signalBondAddress,
 } from "./lib/contract";
+import {
+  agentHash,
+  getPublicClient,
+  readOnchainDashboard,
+  waitForOnchainTx,
+} from "./lib/onchain";
 import { agents as seedAgents, marketTape, signals as seedSignals } from "./lib/seed";
 import { calculateScore, formatBps, formatUsdc, settleAgent } from "./lib/reputation";
 import type { Agent, Direction, Signal } from "./lib/types";
@@ -127,6 +132,14 @@ export default function Home() {
   const [lastOnchainTx, setLastOnchainTx] = useState<Hex>();
   const [onchainBusy, setOnchainBusy] = useState(false);
   const [claimBusy, setClaimBusy] = useState(false);
+  const [dataSourceMode, setDataSourceMode] = useState<"seed" | "onchain">("seed");
+  const [syncState, setSyncState] = useState<"idle" | "syncing" | "synced" | "failed">(
+    "idle",
+  );
+  const [contractSignalCount, setContractSignalCount] = useState<number>();
+  const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number>();
+  const [resolverAddress, setResolverAddress] = useState<Address>();
+  const [ownerAddress, setOwnerAddress] = useState<Address>();
 
   const rankedAgents = useMemo(
     () =>
@@ -145,6 +158,39 @@ export default function Home() {
   const settledSignals = signals.filter((signal) => signal.status === "settled");
   const totalStake = signals.reduce((sum, signal) => sum + signal.stakeUsdc, 0);
   const topScore = calculateScore(rankedAgents[0]).reputation;
+  const latestSignal = signals[0];
+  const isOnchainData = dataSourceMode === "onchain";
+
+  const refreshOnchainState = useCallback(
+    async (account = walletAddress) => {
+      if (!contractsConfigured) {
+        setDataSourceMode("seed");
+        return;
+      }
+
+      setSyncState("syncing");
+      try {
+        const dashboard = await readOnchainDashboard(seedAgents, account);
+        setAgents(dashboard.agents);
+        setSignals(dashboard.signals);
+        setContractSignalCount(dashboard.signalCount);
+        setWalletBalanceUsdc(dashboard.walletBalanceUsdc);
+        setResolverAddress(dashboard.resolver);
+        setOwnerAddress(dashboard.owner);
+        setDataSourceMode("onchain");
+        setSyncState("synced");
+        setWalletError(undefined);
+      } catch (error) {
+        setSyncState("failed");
+        setWalletError(normalizeError(error));
+      }
+    },
+    [walletAddress],
+  );
+
+  useEffect(() => {
+    void refreshOnchainState();
+  }, [refreshOnchainState]);
 
   async function connectWallet() {
     setWalletError(undefined);
@@ -157,6 +203,7 @@ export default function Home() {
       method: "eth_requestAccounts",
     })) as Address[];
     setWalletAddress(accounts[0]);
+    await refreshOnchainState(accounts[0]);
   }
 
   async function claimDemoUsdc() {
@@ -174,6 +221,8 @@ export default function Home() {
     try {
       const txHash = await claimDemoUsdcOnchain(walletAddress);
       setLastOnchainTx(txHash);
+      await waitForOnchainTx(txHash);
+      await refreshOnchainState(walletAddress);
     } catch (error) {
       setWalletError(normalizeError(error));
     } finally {
@@ -198,6 +247,7 @@ export default function Home() {
     };
 
     let onchainTxHash: Hex | undefined;
+    let publishedOnchain = false;
 
     if (contractsConfigured) {
       if (!walletAddress) {
@@ -208,6 +258,9 @@ export default function Home() {
         try {
           onchainTxHash = await publishSignalOnchain(nextSignal, walletAddress);
           setLastOnchainTx(onchainTxHash);
+          await waitForOnchainTx(onchainTxHash);
+          await refreshOnchainState(walletAddress);
+          publishedOnchain = true;
         } catch (error) {
           setWalletError(normalizeError(error));
         } finally {
@@ -216,15 +269,17 @@ export default function Home() {
       }
     }
 
-    setSignals((current) => [
-      { ...nextSignal, txHash: onchainTxHash ?? nextSignal.txHash },
-      ...current,
-    ]);
+    if (!publishedOnchain) {
+      setSignals((current) => [
+        { ...nextSignal, txHash: onchainTxHash ?? nextSignal.txHash },
+        ...current,
+      ]);
+    }
     setSelectedAgentId(scenario.agentId);
     setScenarioIndex((value) => value + 1);
   }
 
-  function resolveSignal() {
+  async function resolveSignal() {
     const nextActive = signals.find((signal) => signal.status === "active");
     if (!nextActive) return;
 
@@ -236,6 +291,47 @@ export default function Home() {
       10_000 *
       directionMultiplier;
     const pnlBps = Math.round(correct ? Math.abs(rawMove) : -Math.abs(rawMove) * 0.7);
+
+    if (isOnchainData && contractsConfigured) {
+      if (!walletAddress) {
+        setWalletError("Connect the resolver wallet to settle an onchain signal.");
+        return;
+      }
+
+      if (!nextActive.onchainId) {
+        setWalletError("This signal has no onchain id to resolve.");
+        return;
+      }
+
+      if (
+        resolverAddress &&
+        ownerAddress &&
+        walletAddress.toLowerCase() !== resolverAddress.toLowerCase() &&
+        walletAddress.toLowerCase() !== ownerAddress.toLowerCase()
+      ) {
+        setWalletError("Only the contract resolver or owner can resolve onchain signals.");
+        return;
+      }
+
+      if (new Date(nextActive.expiresAt).getTime() > Date.now()) {
+        setWalletError(`Onchain resolution unlocks after ${new Date(nextActive.expiresAt).toLocaleString()}.`);
+        return;
+      }
+
+      setOnchainBusy(true);
+      setWalletError(undefined);
+      try {
+        const txHash = await resolveSignalOnchain(nextActive, walletAddress, correct, pnlBps);
+        setLastOnchainTx(txHash);
+        await waitForOnchainTx(txHash);
+        await refreshOnchainState(walletAddress);
+      } catch (error) {
+        setWalletError(normalizeError(error));
+      } finally {
+        setOnchainBusy(false);
+      }
+      return;
+    }
 
     setSignals((current) =>
       current.map((signal) =>
@@ -347,20 +443,48 @@ export default function Home() {
           </div>
 
           <div className="mode-strip">
-            <span className={contractsConfigured ? "mode live" : "mode sim"}>
-              {contractsConfigured ? "Onchain mode ready" : "Simulation mode"}
+            <span className={isOnchainData ? "mode live" : "mode sim"}>
+              {syncState === "syncing"
+                ? "Reading onchain"
+                : isOnchainData
+                  ? "Onchain data"
+                  : "Simulation mode"}
             </span>
+            {contractSignalCount !== undefined ? (
+              <span>
+                Contract signals: <code>{contractSignalCount}</code>
+              </span>
+            ) : null}
             <span>
               SignalBond: <code>{signalBondAddress ? shortHash(signalBondAddress) : "not configured"}</code>
             </span>
             <span>
               Demo USDC: <code>{demoUsdcAddress ? shortHash(demoUsdcAddress) : "not configured"}</code>
             </span>
+            {walletBalanceUsdc !== undefined ? (
+              <span>
+                Demo balance: <code>{formatUsdc(walletBalanceUsdc)}</code>
+              </span>
+            ) : null}
+            {resolverAddress ? (
+              <span>
+                Resolver: <code>{shortHash(resolverAddress)}</code>
+              </span>
+            ) : null}
             {lastOnchainTx ? (
               <span>
                 Last tx: <code>{shortHash(lastOnchainTx)}</code>
               </span>
             ) : null}
+            <button
+              className="mode-refresh"
+              disabled={syncState === "syncing"}
+              onClick={() => refreshOnchainState()}
+              type="button"
+            >
+              <RefreshCw aria-hidden="true" />
+              Refresh
+            </button>
             {walletError ? <strong>{walletError}</strong> : null}
           </div>
 
@@ -390,6 +514,12 @@ export default function Home() {
                   <span>Stake</span>
                   <span>Status</span>
                 </div>
+                {signals.length === 0 ? (
+                  <div className="signal-empty" role="row">
+                    <strong>No onchain signals yet</strong>
+                    <span>Connect a wallet, claim demo USDC, and run an agent cycle to mint the first SignalBond record.</span>
+                  </div>
+                ) : null}
                 {signals.map((signal) => {
                   const agent = agents.find((item) => item.id === signal.agentId);
                   return (
@@ -398,7 +528,7 @@ export default function Home() {
                         <strong>{signal.market}</strong>
                         <em>{signal.venue}</em>
                       </span>
-                      <span>{agent?.handle}</span>
+                      <span>{agent?.handle ?? shortHash(signal.agentId)}</span>
                       <span className={`side ${isBullish(signal.direction) ? "positive" : "negative"}`}>
                         {isBullish(signal.direction) ? (
                           <ArrowUpRight aria-hidden="true" />
@@ -489,15 +619,18 @@ export default function Home() {
 
           <div className="latest-signal">
             <span className="eyebrow">Latest Reasoning</span>
-            <strong>{signals[0]?.market}</strong>
-            <p>{signals[0]?.reasoning}</p>
+            <strong>{latestSignal?.market ?? "No signal minted yet"}</strong>
+            <p>
+              {latestSignal?.reasoning ??
+                "The next agent cycle will write a source hash, stake amount, and market direction to Arc."}
+            </p>
             <div className="hash-row">
               <span>tx</span>
-              <code>{shortHash(signals[0]?.txHash)}</code>
+              <code>{shortHash(latestSignal?.txHash)}</code>
             </div>
             <div className="hash-row">
               <span>source</span>
-              <code>{shortHash(signals[0]?.sourceHash)}</code>
+              <code>{shortHash(latestSignal?.sourceHash)}</code>
             </div>
           </div>
         </aside>
@@ -635,10 +768,7 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
     chain: arcCanteen,
     transport: custom(window.ethereum),
   });
-  const publicClient = createPublicClient({
-    chain: arcCanteen,
-    transport: http(),
-  });
+  const publicClient = getPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
   const approveHash = await walletClient.writeContract({
@@ -654,7 +784,7 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
     abi: signalBondAbi,
     functionName: "createSignal",
     args: [
-      keccak256(stringToHex(signal.agentId)),
+      agentHash(signal.agentId),
       signal.market,
       directionToContract(signal.direction),
       signal.confidenceBps,
@@ -663,6 +793,34 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
       signal.sourceHash,
       keccak256(stringToHex(signal.reasoning)),
     ],
+  });
+}
+
+async function resolveSignalOnchain(
+  signal: Signal,
+  account: Address,
+  correct: boolean,
+  pnlBps: number,
+): Promise<Hex> {
+  if (!window.ethereum) {
+    throw new Error("No injected wallet found.");
+  }
+
+  if (!signalBondAddress || !signal.onchainId) {
+    throw new Error("SignalBond address or onchain signal id is not configured.");
+  }
+
+  const walletClient = createWalletClient({
+    account,
+    chain: arcCanteen,
+    transport: custom(window.ethereum),
+  });
+
+  return walletClient.writeContract({
+    address: signalBondAddress,
+    abi: signalBondAbi,
+    functionName: "resolveSignal",
+    args: [BigInt(signal.onchainId), correct, BigInt(pnlBps)],
   });
 }
 

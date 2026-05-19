@@ -23,6 +23,7 @@ export type SignalStatus = "active" | "settled";
 
 export type Signal = {
   id: string;
+  onchainId?: number;
   agentId: string;
   market: string;
   venue: string;
@@ -38,6 +39,7 @@ export type Signal = {
   correct?: boolean;
   sourceHash: `0x${string}`;
   txHash: `0x${string}`;
+  publisher?: `0x${string}`;
   reasoning: string;
   sources: string[];
 };

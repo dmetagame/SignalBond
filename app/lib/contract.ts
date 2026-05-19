@@ -71,6 +71,13 @@ export const signalBondAbi = [
 export const erc20Abi = [
   {
     type: "function",
+    name: "claim",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [],
+  },
+  {
+    type: "function",
     name: "approve",
     stateMutability: "nonpayable",
     inputs: [

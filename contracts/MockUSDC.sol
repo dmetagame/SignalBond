@@ -8,9 +8,11 @@ contract MockUSDC {
 
     uint256 public totalSupply;
     address public owner;
+    uint256 public constant CLAIM_AMOUNT = 10_000e6;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
+    mapping(address => bool) public hasClaimed;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Approval(address indexed owner, address indexed spender, uint256 amount);
@@ -49,6 +51,12 @@ contract MockUSDC {
 
     function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
+    }
+
+    function claim() external {
+        require(!hasClaimed[msg.sender], "ALREADY_CLAIMED");
+        hasClaimed[msg.sender] = true;
+        _mint(msg.sender, CLAIM_AMOUNT);
     }
 
     function _transfer(address from, address to, uint256 amount) private {

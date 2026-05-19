@@ -20,7 +20,17 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { createWalletClient, custom, keccak256, parseUnits, stringToHex, type Address, type Hex } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  http,
+  keccak256,
+  parseUnits,
+  stringToHex,
+  type Address,
+  type Hex,
+} from "viem";
 import {
   arcCanteen,
   contractsConfigured,
@@ -116,6 +126,7 @@ export default function Home() {
   const [walletError, setWalletError] = useState<string>();
   const [lastOnchainTx, setLastOnchainTx] = useState<Hex>();
   const [onchainBusy, setOnchainBusy] = useState(false);
+  const [claimBusy, setClaimBusy] = useState(false);
 
   const rankedAgents = useMemo(
     () =>
@@ -146,6 +157,28 @@ export default function Home() {
       method: "eth_requestAccounts",
     })) as Address[];
     setWalletAddress(accounts[0]);
+  }
+
+  async function claimDemoUsdc() {
+    setWalletError(undefined);
+    if (!contractsConfigured) {
+      setWalletError("Demo contracts are not configured yet.");
+      return;
+    }
+    if (!walletAddress) {
+      setWalletError("Connect wallet before claiming demo USDC.");
+      return;
+    }
+
+    setClaimBusy(true);
+    try {
+      const txHash = await claimDemoUsdcOnchain(walletAddress);
+      setLastOnchainTx(txHash);
+    } catch (error) {
+      setWalletError(normalizeError(error));
+    } finally {
+      setClaimBusy(false);
+    }
   }
 
   async function runAgentCycle() {
@@ -288,6 +321,15 @@ export default function Home() {
               <h1>Accountable market agents with USDC at stake.</h1>
             </div>
             <div className="hero-actions">
+              <button
+                className="secondary-action"
+                disabled={claimBusy}
+                onClick={claimDemoUsdc}
+                type="button"
+              >
+                <WalletCards aria-hidden="true" />
+                {claimBusy ? "Claiming..." : "Claim Demo USDC"}
+              </button>
               <button
                 className="primary-action"
                 disabled={onchainBusy}
@@ -593,14 +635,19 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
     chain: arcCanteen,
     transport: custom(window.ethereum),
   });
+  const publicClient = createPublicClient({
+    chain: arcCanteen,
+    transport: http(),
+  });
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
-  await walletClient.writeContract({
+  const approveHash = await walletClient.writeContract({
     address: demoUsdcAddress,
     abi: erc20Abi,
     functionName: "approve",
     args: [signalBondAddress, stakeAmount],
   });
+  await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
   return walletClient.writeContract({
     address: signalBondAddress,
@@ -616,6 +663,28 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
       signal.sourceHash,
       keccak256(stringToHex(signal.reasoning)),
     ],
+  });
+}
+
+async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
+  if (!window.ethereum) {
+    throw new Error("No injected wallet found.");
+  }
+
+  if (!demoUsdcAddress) {
+    throw new Error("Demo USDC address is not configured.");
+  }
+
+  const walletClient = createWalletClient({
+    account,
+    chain: arcCanteen,
+    transport: custom(window.ethereum),
+  });
+
+  return walletClient.writeContract({
+    address: demoUsdcAddress,
+    abi: erc20Abi,
+    functionName: "claim",
   });
 }
 

@@ -18,6 +18,8 @@ import {
 } from "./contract";
 
 const MAX_SIGNALS_TO_READ = 40;
+const LOG_LOOKBACK_BLOCKS = 250_000n;
+const LOG_CHUNK_BLOCKS = 9_999n;
 
 const signalCreatedEvent = parseAbiItem(
   "event SignalCreated(uint256 indexed signalId, bytes32 indexed agentId, address indexed publisher, string market, uint8 direction, uint16 confidenceBps, uint256 stakeAmount, uint64 expiresAt, bytes32 sourceDataHash, bytes32 explanationHash)",
@@ -127,6 +129,8 @@ export async function readOnchainDashboard(
 
   const latestSignalId = Math.max(0, Number(nextSignalId) - 1);
   const firstSignalId = Math.max(1, latestSignalId - MAX_SIGNALS_TO_READ + 1);
+  const logFromBlock =
+    blockNumber > LOG_LOOKBACK_BLOCKS ? blockNumber - LOG_LOOKBACK_BLOCKS : 0n;
   const ids =
     latestSignalId === 0
       ? []
@@ -146,14 +150,12 @@ export async function readOnchainDashboard(
         }),
       ),
     ),
-    publicClient
-      .getLogs({
-        address: bondAddress,
-        event: signalCreatedEvent,
-        fromBlock: 0n,
-        toBlock: "latest",
-      })
-      .catch(() => []),
+    readSignalCreatedLogs(publicClient, bondAddress, {
+      fromBlock: logFromBlock,
+      latestSignalId,
+      minimumSignalId: firstSignalId,
+      toBlock: blockNumber,
+    }),
   ]);
 
   const txBySignalId = new Map<number, Hex>();
@@ -252,6 +254,65 @@ function contractSignalToSignal(
       "This signal is loaded from SignalBond contract storage. Source data and thesis hashes are anchored on Arc for auditability.",
     sources: ["signalbond-contract", "arc-event-log"],
   };
+}
+
+async function readSignalCreatedLogs(
+  publicClient: ReturnType<typeof getPublicClient>,
+  bondAddress: Address,
+  {
+    fromBlock,
+    latestSignalId,
+    minimumSignalId,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    latestSignalId: number;
+    minimumSignalId: number;
+    toBlock: bigint;
+  },
+) {
+  if (latestSignalId === 0) {
+    return [];
+  }
+
+  const logs: Array<{
+    args: { signalId?: bigint };
+    transactionHash: Hex;
+  }> = [];
+  const requiredIds = new Set(
+    Array.from(
+      { length: latestSignalId - minimumSignalId + 1 },
+      (_, index) => minimumSignalId + index,
+    ),
+  );
+
+  let chunkToBlock = toBlock;
+  while (chunkToBlock >= fromBlock) {
+    const chunkFromBlock =
+      chunkToBlock > LOG_CHUNK_BLOCKS ? chunkToBlock - LOG_CHUNK_BLOCKS : 0n;
+    const boundedFromBlock = chunkFromBlock < fromBlock ? fromBlock : chunkFromBlock;
+    const chunk = await publicClient.getLogs({
+      address: bondAddress,
+      event: signalCreatedEvent,
+      fromBlock: boundedFromBlock,
+      toBlock: chunkToBlock,
+    });
+    logs.push(...chunk);
+
+    for (const log of chunk) {
+      const signalId = log.args.signalId;
+      if (signalId !== undefined) {
+        requiredIds.delete(Number(signalId));
+      }
+    }
+    if (requiredIds.size === 0 || boundedFromBlock === 0n) {
+      break;
+    }
+
+    chunkToBlock = boundedFromBlock - 1n;
+  }
+
+  return logs;
 }
 
 function contractToDirection(direction: number): Direction {

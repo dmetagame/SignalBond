@@ -45,6 +45,11 @@ import {
   waitForOnchainTx,
 } from "./lib/onchain";
 import { agents as seedAgents, marketTape, signals as seedSignals } from "./lib/seed";
+import {
+  directionToContractValue,
+  generateAgentScan,
+  type AgentScan,
+} from "./lib/agent-scan";
 import { calculateScore, formatBps, formatUsdc, settleAgent } from "./lib/reputation";
 import type { Agent, Direction, Signal } from "./lib/types";
 
@@ -55,72 +60,6 @@ declare global {
     };
   }
 }
-
-const signalScenarios: Array<{
-  agentId: string;
-  market: string;
-  venue: string;
-  direction: Direction;
-  confidenceBps: number;
-  stakeUsdc: number;
-  entryPrice: number;
-  targetPrice: number;
-  reasoning: string;
-  sources: string[];
-}> = [
-  {
-    agentId: "arb-cartographer",
-    market: "USDC bridge spread",
-    venue: "Gateway route basket",
-    direction: "YES",
-    confidenceBps: 6400,
-    stakeUsdc: 460,
-    entryPrice: 0.018,
-    targetPrice: 0.031,
-    reasoning:
-      "Gateway quotes are stable while two venues still imply stale USDC inventory. Expected spread exceeds route and settlement costs.",
-    sources: ["gateway-quotes", "cex-depth", "arc-gas"],
-  },
-  {
-    agentId: "perp-warden",
-    market: "BTC-PERP liquidation band",
-    venue: "Perp venue basket",
-    direction: "LONG",
-    confidenceBps: 5900,
-    stakeUsdc: 520,
-    entryPrice: 106420,
-    targetPrice: 108900,
-    reasoning:
-      "Liquidation map shows thin downside after forced selling. Funding reset and spot basis improved without a matching OI expansion.",
-    sources: ["liquidation-map", "funding-reset", "basis-monitor"],
-  },
-  {
-    agentId: "polymath-oracle",
-    market: "June Fed hold probability",
-    venue: "Prediction market",
-    direction: "YES",
-    confidenceBps: 7200,
-    stakeUsdc: 380,
-    entryPrice: 0.61,
-    targetPrice: 0.74,
-    reasoning:
-      "Speech sentiment, terminal-rate pricing, and current labor data point to policy patience. Market odds are still discounting a stale surprise path.",
-    sources: ["fed-speech-embedding", "rates-curve", "labor-nowcast"],
-  },
-  {
-    agentId: "macro-sentinel",
-    market: "USDC/EURC momentum",
-    venue: "Arc FX desk",
-    direction: "SHORT",
-    confidenceBps: 6300,
-    stakeUsdc: 410,
-    entryPrice: 0.9214,
-    targetPrice: 0.9142,
-    reasoning:
-      "Euro liquidity improved into the London close while dollar funding premium softened. Agent expects mean reversion over the next session.",
-    sources: ["fx-liquidity", "basis-swap", "session-flow"],
-  },
-];
 
 export default function Home() {
   const [agents, setAgents] = useState<Agent[]>(
@@ -237,19 +176,26 @@ export default function Home() {
   }
 
   async function runAgentCycle() {
-    const scenario = signalScenarios[scenarioIndex % signalScenarios.length];
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const scan = await fetchAgentScan(scenarioIndex);
     const nextId = `sig-${1843 + signals.length + scenarioIndex}`;
 
     const nextSignal: Signal = {
-      ...scenario,
       id: nextId,
-      createdAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+      agentId: scan.agentId,
+      market: scan.market,
+      venue: scan.venue,
+      direction: scan.direction,
+      confidenceBps: scan.confidenceBps,
+      stakeUsdc: scan.stakeUsdc,
+      entryPrice: scan.entryPrice,
+      targetPrice: scan.targetPrice,
+      createdAt: scan.generatedAt,
+      expiresAt: scan.expiresAt,
       status: "active",
-      sourceHash: pseudoHash(`${nextId}:${scenario.agentId}:source`),
-      txHash: pseudoHash(`${nextId}:${scenario.market}:tx`),
+      sourceHash: scan.sourceHash,
+      txHash: pseudoHash(`${nextId}:${scan.market}:tx`),
+      reasoning: scan.reasoning,
+      sources: scan.sources,
     };
 
     let onchainTxHash: Hex | undefined;
@@ -281,7 +227,7 @@ export default function Home() {
         ...current,
       ]);
     }
-    setSelectedAgentId(scenario.agentId);
+    setSelectedAgentId(scan.agentId);
     setScenarioIndex((value) => value + 1);
   }
 
@@ -804,7 +750,7 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
     args: [
       agentHash(signal.agentId),
       signal.market,
-      directionToContract(signal.direction),
+      directionToContractValue(signal.direction),
       signal.confidenceBps,
       stakeAmount,
       BigInt(Math.floor(new Date(signal.expiresAt).getTime() / 1000)),
@@ -864,19 +810,6 @@ async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
   });
 }
 
-function directionToContract(direction: Direction): number {
-  switch (direction) {
-    case "LONG":
-      return 0;
-    case "SHORT":
-      return 1;
-    case "YES":
-      return 2;
-    case "NO":
-      return 3;
-  }
-}
-
 function pseudoHash(input: string): `0x${string}` {
   let hash = 0;
   for (let index = 0; index < input.length; index += 1) {
@@ -885,6 +818,22 @@ function pseudoHash(input: string): `0x${string}` {
 
   const fragment = Math.abs(hash).toString(16).padStart(8, "0");
   return `0x${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}`;
+}
+
+async function fetchAgentScan(sequence: number): Promise<AgentScan> {
+  try {
+    const response = await fetch(`/api/agent-scan?sequence=${sequence}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Agent scan failed with ${response.status}.`);
+    }
+
+    const payload = (await response.json()) as { signal: AgentScan };
+    return payload.signal;
+  } catch {
+    return generateAgentScan({ sequence });
+  }
 }
 
 function shortHash(hash?: string): string {

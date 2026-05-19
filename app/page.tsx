@@ -123,7 +123,9 @@ const signalScenarios: Array<{
 ];
 
 export default function Home() {
-  const [agents, setAgents] = useState<Agent[]>(seedAgents);
+  const [agents, setAgents] = useState<Agent[]>(
+    contractsConfigured ? seedAgents.map(resetAgentStats) : seedAgents,
+  );
   const [signals, setSignals] = useState<Signal[]>(contractsConfigured ? [] : seedSignals);
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [selectedAgentId, setSelectedAgentId] = useState(seedAgents[0].id);
@@ -756,6 +758,18 @@ function SettlementItem({
 
 function isBullish(direction: Direction): boolean {
   return direction === "LONG" || direction === "YES";
+}
+
+function resetAgentStats(agent: Agent): Agent {
+  return {
+    ...agent,
+    stakedUsdc: 0,
+    resolvedSignals: 0,
+    correctSignals: 0,
+    cumulativePnlBps: 0,
+    calibrationBps: 0,
+    maxDrawdownBps: 0,
+  };
 }
 
 async function publishSignalOnchain(signal: Signal, account: Address): Promise<Hex> {

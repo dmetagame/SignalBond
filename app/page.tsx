@@ -124,7 +124,7 @@ const signalScenarios: Array<{
 
 export default function Home() {
   const [agents, setAgents] = useState<Agent[]>(seedAgents);
-  const [signals, setSignals] = useState<Signal[]>(seedSignals);
+  const [signals, setSignals] = useState<Signal[]>(contractsConfigured ? [] : seedSignals);
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [selectedAgentId, setSelectedAgentId] = useState(seedAgents[0].id);
   const [walletAddress, setWalletAddress] = useState<Address>();
@@ -132,9 +132,11 @@ export default function Home() {
   const [lastOnchainTx, setLastOnchainTx] = useState<Hex>();
   const [onchainBusy, setOnchainBusy] = useState(false);
   const [claimBusy, setClaimBusy] = useState(false);
-  const [dataSourceMode, setDataSourceMode] = useState<"seed" | "onchain">("seed");
+  const [dataSourceMode, setDataSourceMode] = useState<"seed" | "onchain">(
+    contractsConfigured ? "onchain" : "seed",
+  );
   const [syncState, setSyncState] = useState<"idle" | "syncing" | "synced" | "failed">(
-    "idle",
+    contractsConfigured ? "syncing" : "idle",
   );
   const [contractSignalCount, setContractSignalCount] = useState<number>();
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number>();
@@ -164,6 +166,8 @@ export default function Home() {
   const refreshOnchainState = useCallback(
     async (account = walletAddress) => {
       if (!contractsConfigured) {
+        setAgents(seedAgents);
+        setSignals(seedSignals);
         setDataSourceMode("seed");
         return;
       }

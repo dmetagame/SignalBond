@@ -19,6 +19,7 @@ import {
   ensureArcNetwork,
   fetchAgentScan,
   fetchChainState,
+  hasClaimedDemoUsdc,
   normalizeError,
   numberToHexChainId,
   publishSignalOnchain,
@@ -26,6 +27,7 @@ import {
   resolveSignalOnchain,
   sameChainId,
   scanToSignal,
+  withWalletTimeout,
 } from "../../lib/dashboard-actions";
 import type { ChainState } from "../../lib/chain-state";
 import type { Agent, Signal } from "../../lib/types";
@@ -38,6 +40,7 @@ export type DashboardContextValue = {
   walletAddress?: Address;
   walletError?: string;
   walletBalanceUsdc?: number;
+  demoUsdcClaimed?: boolean;
   walletOnArc: boolean;
   isOnchainData: boolean;
   syncState: "idle" | "syncing" | "synced" | "failed";
@@ -93,6 +96,7 @@ export default function DashboardProvider({
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number | undefined>(
     initialChainState?.walletBalanceUsdc,
   );
+  const [demoUsdcClaimed, setDemoUsdcClaimed] = useState<boolean | undefined>();
   const [resolverAddress, setResolverAddress] = useState<Address | undefined>(
     initialChainState?.resolver,
   );
@@ -140,8 +144,12 @@ export default function DashboardProvider({
 
       setSyncState("syncing");
       try {
-        const dashboard = await fetchChainState(account ?? undefined);
+        const [dashboard, claimed] = await Promise.all([
+          fetchChainState(account ?? undefined),
+          account ? hasClaimedDemoUsdc(account).catch(() => undefined) : undefined,
+        ]);
         applyChainState(dashboard);
+        setDemoUsdcClaimed(claimed);
         setDataSourceMode("onchain");
         setSyncState("synced");
         setWalletError(undefined);
@@ -171,6 +179,7 @@ export default function DashboardProvider({
       if (!nextAccount) {
         setWalletAddress(undefined);
         setWalletBalanceUsdc(undefined);
+        setDemoUsdcClaimed(undefined);
         setWalletChainId(undefined);
         setLastOnchainTx(undefined);
         void refreshOnchainState(null);
@@ -226,6 +235,7 @@ export default function DashboardProvider({
     setWalletError(undefined);
     setWalletAddress(undefined);
     setWalletBalanceUsdc(undefined);
+    setDemoUsdcClaimed(undefined);
     setWalletChainId(undefined);
     setLastOnchainTx(undefined);
 
@@ -251,13 +261,23 @@ export default function DashboardProvider({
       setWalletError("Connect wallet before claiming demo USDC.");
       return;
     }
+    if (demoUsdcClaimed) {
+      setWalletError(
+        "Demo USDC was already claimed by this wallet. Use the existing balance or switch wallets.",
+      );
+      return;
+    }
 
     setClaimBusy(true);
     try {
-      const txHash = await claimDemoUsdcOnchain(walletAddress);
+      const txHash = await withWalletTimeout(
+        claimDemoUsdcOnchain(walletAddress),
+        "Demo USDC claim",
+      );
       setLastOnchainTx(txHash);
       await waitForOnchainTx(txHash);
       await refreshOnchainState(walletAddress);
+      setDemoUsdcClaimed(true);
     } catch (error) {
       setWalletError(normalizeError(error));
     } finally {
@@ -422,6 +442,7 @@ export default function DashboardProvider({
       walletAddress,
       walletError,
       walletBalanceUsdc,
+      demoUsdcClaimed,
       walletOnArc,
       isOnchainData,
       syncState,
@@ -448,6 +469,7 @@ export default function DashboardProvider({
       walletAddress,
       walletError,
       walletBalanceUsdc,
+      demoUsdcClaimed,
       walletOnArc,
       isOnchainData,
       syncState,

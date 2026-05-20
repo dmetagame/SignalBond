@@ -23,6 +23,8 @@ import {
 import type { ChainState } from "./chain-state";
 import type { Agent, Direction, Signal } from "./types";
 
+const WALLET_REQUEST_TIMEOUT_MS = 120_000;
+
 export function isBullish(direction: Direction): boolean {
   return direction === "LONG" || direction === "YES";
 }
@@ -151,6 +153,12 @@ export async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
 
   await ensureArcNetwork();
 
+  if (await hasClaimedDemoUsdc(account)) {
+    throw new Error(
+      "Demo USDC was already claimed by this wallet. Use the existing balance or switch wallets.",
+    );
+  }
+
   const walletClient = createWalletClient({
     account,
     chain: arcCanteen,
@@ -161,6 +169,19 @@ export async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
     address: demoUsdcAddress,
     abi: erc20Abi,
     functionName: "claim",
+  });
+}
+
+export async function hasClaimedDemoUsdc(account: Address): Promise<boolean> {
+  if (!demoUsdcAddress) {
+    throw new Error("Demo USDC address is not configured.");
+  }
+
+  return getPublicClient().readContract({
+    address: demoUsdcAddress,
+    abi: erc20Abi,
+    functionName: "hasClaimed",
+    args: [account],
   });
 }
 
@@ -277,6 +298,26 @@ export function normalizeError(error: unknown): string {
     return error.message;
   }
   return "Transaction failed.";
+}
+
+export function withWalletTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return withTimeout(
+    promise,
+    WALLET_REQUEST_TIMEOUT_MS,
+    `${label} timed out. Check your wallet for a stale request, reject it if needed, then try again.`,
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = globalThis.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise
+      .then(resolve, reject)
+      .finally(() => globalThis.clearTimeout(timeout));
+  });
 }
 
 declare global {

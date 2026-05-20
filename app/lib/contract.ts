@@ -142,6 +142,13 @@ export const erc20Abi = [
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "hasClaimed",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
 ] as const;
 
 function readAddress(value: string | undefined): Address | undefined {

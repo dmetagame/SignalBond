@@ -20,6 +20,7 @@ import {
 const MAX_SIGNALS_TO_READ = 40;
 const LOG_LOOKBACK_BLOCKS = 250_000n;
 const LOG_CHUNK_BLOCKS = 9_999n;
+const TX_CONFIRMATION_TIMEOUT_MS = 45_000;
 
 const signalCreatedEvent = parseAbiItem(
   "event SignalCreated(uint256 indexed signalId, bytes32 indexed agentId, address indexed publisher, string market, uint8 direction, uint16 confidenceBps, uint256 stakeAmount, uint64 expiresAt, bytes32 sourceDataHash, bytes32 explanationHash)",
@@ -72,7 +73,16 @@ export function agentHash(agentId: string): Hex {
 }
 
 export async function waitForOnchainTx(hash: Hex) {
-  return getPublicClient().waitForTransactionReceipt({ hash });
+  const receipt = await getPublicClient().waitForTransactionReceipt({
+    hash,
+    timeout: TX_CONFIRMATION_TIMEOUT_MS,
+  });
+
+  if (receipt.status === "reverted") {
+    throw new Error("Transaction reverted on Arc. Check the wallet activity for details.");
+  }
+
+  return receipt;
 }
 
 export async function readOnchainDashboard(

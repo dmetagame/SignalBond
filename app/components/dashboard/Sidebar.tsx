@@ -106,6 +106,7 @@ export default function Sidebar() {
     signals,
     walletAddress,
     walletBalanceUsdc,
+    demoUsdcClaimed,
     connectWallet,
     claimDemoUsdc,
     busy,
@@ -114,6 +115,8 @@ export default function Sidebar() {
   const activeSignalCount = signals.filter((s) => s.status === "active").length;
   const primaryNav = buildPrimaryNav(activeSignalCount);
   const connected = Boolean(walletAddress);
+  const claimDisabled = connected && (busy.claim || demoUsdcClaimed === true);
+  const claimLabel = demoUsdcClaimed ? "Claimed" : busy.claim ? "Claiming..." : "Claim";
 
   return (
     <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 flex-col gap-6 border-r border-line bg-panel px-4 py-6">
@@ -166,17 +169,17 @@ export default function Sidebar() {
           <p className="mt-1 text-xs leading-relaxed text-muted">
             {connected
               ? walletBalanceUsdc !== undefined
-                ? `Balance ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(walletBalanceUsdc)} · Top up with demo tokens.`
-                : "Top up demo USDC to stake your next call."
+                ? `Balance ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(walletBalanceUsdc)} · One faucet claim per wallet.`
+                : "Claim demo USDC once to stake your next call."
               : "Stake calls and earn reputation on Arc Canteen."}
           </p>
           <button
             type="button"
             onClick={connected ? claimDemoUsdc : connectWallet}
-            disabled={connected ? busy.claim : false}
+            disabled={claimDisabled}
             className="mt-3 w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
           >
-            {connected ? (busy.claim ? "Claiming…" : "Claim") : "Connect"}
+            {connected ? claimLabel : "Connect"}
           </button>
         </div>
       </div>

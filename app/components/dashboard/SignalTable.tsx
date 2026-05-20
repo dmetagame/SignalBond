@@ -43,13 +43,17 @@ function StatusPill({ status }: { status: Status }) {
 export default function SignalTable({
   signals,
   agents,
+  onSelect,
   onResolve,
   resolving = false,
+  settlementLocked,
 }: {
   signals: Signal[];
   agents: Agent[];
+  onSelect?: (signal: Signal) => void;
   onResolve?: (signal: Signal) => void | Promise<void>;
   resolving?: boolean;
+  settlementLocked?: (signal: Signal) => boolean;
 }) {
   const agentMap = new Map(agents.map((a) => [a.id, a]));
 
@@ -99,10 +103,23 @@ export default function SignalTable({
             {signals.map((signal) => {
               const agent = agentMap.get(signal.agentId);
               const status = deriveStatus(signal);
+              const locked = settlementLocked?.(signal) ?? false;
               return (
                 <tr
                   key={signal.id}
-                  className="text-sm text-text hover:bg-panel-muted/50"
+                  onClick={() => onSelect?.(signal)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onSelect?.(signal);
+                    }
+                  }}
+                  role={onSelect ? "button" : undefined}
+                  tabIndex={onSelect ? 0 : undefined}
+                  className={[
+                    "text-sm text-text hover:bg-panel-muted/50",
+                    onSelect ? "cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent/40" : "",
+                  ].join(" ")}
                 >
                   <td className="px-3 py-3 font-mono text-xs text-muted">{signal.id}</td>
                   <td className="px-3 py-3">
@@ -150,12 +167,16 @@ export default function SignalTable({
                       {status === "Active" ? (
                         <button
                           type="button"
-                          onClick={() => onResolve(signal)}
-                          disabled={resolving}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onResolve(signal);
+                          }}
+                          disabled={resolving || locked}
+                          title={locked ? "Settlement unlocks after expiry" : undefined}
                           className="inline-flex items-center gap-1 rounded-md border border-line-soft bg-panel-muted px-2 py-1 text-[11px] font-semibold text-muted hover:border-line hover:text-text disabled:opacity-50"
                         >
                           <Gavel className="size-3" strokeWidth={2} />
-                          Resolve
+                          {locked ? "Locked" : "Resolve"}
                         </button>
                       ) : (
                         <span className="text-[11px] text-faint">—</span>

@@ -45,6 +45,21 @@ export type PublishSuccess = {
   reputationDelta: number;
 };
 
+export type SettlementSuccess = {
+  agentName: string;
+  market: string;
+  signalId?: number;
+  stakeUsdc: number;
+  txHash: Hex;
+  correct: boolean;
+  pnlBps: number;
+  reputationBefore: number;
+  reputationAfter: number;
+  winRateBefore: number;
+  winRateAfter: number;
+  resolvedDelta: number;
+};
+
 export type DashboardContextValue = {
   agents: Agent[];
   signals: Signal[];
@@ -60,8 +75,10 @@ export type DashboardContextValue = {
   resolverAddress?: Address;
   ownerAddress?: Address;
   agentProposal?: AgentScan;
+  selectedSignal?: Signal;
   publishStage: PublishStage;
   publishSuccess?: PublishSuccess;
+  settlementSuccess?: SettlementSuccess;
   busy: {
     onchain: boolean;
     claim: boolean;
@@ -73,10 +90,13 @@ export type DashboardContextValue = {
   runAgentCycle: () => Promise<void>;
   publishProposal: () => Promise<void>;
   dismissProposal: () => void;
+  selectSignal: (signal: Signal) => void;
+  closeSignalDetails: () => void;
   resolveSignal: (signal?: Signal) => Promise<void>;
   refreshChainState: () => Promise<void>;
   clearError: () => void;
   clearPublishSuccess: () => void;
+  clearSettlementSuccess: () => void;
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -133,10 +153,16 @@ export default function DashboardProvider({
   const [agentProposal, setAgentProposal] = useState<AgentScan>();
   const [publishStage, setPublishStage] = useState<PublishStage>("idle");
   const [publishSuccess, setPublishSuccess] = useState<PublishSuccess>();
+  const [settlementSuccess, setSettlementSuccess] = useState<SettlementSuccess>();
+  const [selectedSignalId, setSelectedSignalId] = useState<string>();
 
   const arcChainHex = useMemo(() => numberToHexChainId(arcCanteen.id), []);
   const walletOnArc = walletChainId ? sameChainId(walletChainId, arcChainHex) : false;
   const isOnchainData = dataSourceMode === "onchain";
+  const selectedSignal = useMemo(
+    () => signals.find((signal) => signal.id === selectedSignalId),
+    [signals, selectedSignalId],
+  );
 
   const applyChainState = useCallback((dashboard: ChainState) => {
     setAgents(dashboard.agents);
@@ -199,6 +225,8 @@ export default function DashboardProvider({
         setWalletChainId(undefined);
         setLastOnchainTx(undefined);
         setPublishSuccess(undefined);
+        setSettlementSuccess(undefined);
+        setSelectedSignalId(undefined);
         void refreshOnchainState(null);
         return;
       }
@@ -256,6 +284,8 @@ export default function DashboardProvider({
     setWalletChainId(undefined);
     setLastOnchainTx(undefined);
     setPublishSuccess(undefined);
+    setSettlementSuccess(undefined);
+    setSelectedSignalId(undefined);
 
     try {
       await window.ethereum?.request({
@@ -307,6 +337,7 @@ export default function DashboardProvider({
     setScanBusy(true);
     setWalletError(undefined);
     setPublishSuccess(undefined);
+    setSettlementSuccess(undefined);
     try {
       const scan = await fetchAgentScan(scenarioIndex);
       setAgentProposal(scan);
@@ -331,6 +362,7 @@ export default function DashboardProvider({
       setOnchainBusy(true);
       setWalletError(undefined);
       setPublishSuccess(undefined);
+      setSettlementSuccess(undefined);
       try {
         const agentBefore = agents.find((agent) => agent.id === proposalSignal.agentId);
         const scoreBefore = agentBefore ? calculateScore(agentBefore).reputation : undefined;
@@ -430,11 +462,37 @@ export default function DashboardProvider({
 
         setOnchainBusy(true);
         setWalletError(undefined);
+        setPublishSuccess(undefined);
+        setSettlementSuccess(undefined);
         try {
+          const agentBefore = agents.find((agent) => agent.id === nextActive.agentId);
+          const beforeScore = agentBefore ? calculateScore(agentBefore).reputation : 0;
+          const beforeWinRate = readWinRate(agentBefore);
+          const beforeResolved = agentBefore?.resolvedSignals ?? 0;
           const txHash = await resolveSignalOnchain(nextActive, walletAddress, correct, pnlBps);
           setLastOnchainTx(txHash);
           await waitForOnchainTx(txHash);
-          await refreshOnchainState(walletAddress);
+          const dashboard = await refreshOnchainState(walletAddress);
+          const agentAfter =
+            dashboard?.agents.find((agent) => agent.id === nextActive.agentId) ?? agentBefore;
+          const afterScore = agentAfter ? calculateScore(agentAfter).reputation : beforeScore;
+          setSettlementSuccess({
+            agentName: agentAfter?.name ?? agentBefore?.name ?? nextActive.agentId,
+            market: nextActive.market,
+            signalId: nextActive.onchainId,
+            stakeUsdc: nextActive.stakeUsdc,
+            txHash,
+            correct,
+            pnlBps,
+            reputationBefore: beforeScore,
+            reputationAfter: afterScore,
+            winRateBefore: beforeWinRate,
+            winRateAfter: readWinRate(agentAfter),
+            resolvedDelta: Math.max(
+              0,
+              (agentAfter?.resolvedSignals ?? beforeResolved) - beforeResolved,
+            ),
+          });
         } catch (error) {
           setWalletError(normalizeError(error));
         } finally {
@@ -450,21 +508,43 @@ export default function DashboardProvider({
             : signal,
         ),
       );
+      const agentBefore = agents.find((agent) => agent.id === nextActive.agentId);
+      const beforeScore = agentBefore ? calculateScore(agentBefore).reputation : 0;
+      const beforeWinRate = readWinRate(agentBefore);
+      const settledAgent = agentBefore
+        ? settleAgent(agentBefore, {
+            correct,
+            pnlBps,
+            stakeUsdc: nextActive.stakeUsdc,
+            confidenceBps: nextActive.confidenceBps,
+          })
+        : undefined;
+
       setAgents((current) =>
         current.map((agent) =>
-          agent.id === nextActive.agentId
-            ? settleAgent(agent, {
-                correct,
-                pnlBps,
-                stakeUsdc: nextActive.stakeUsdc,
-                confidenceBps: nextActive.confidenceBps,
-              })
-            : agent,
+          agent.id === nextActive.agentId && settledAgent ? settledAgent : agent,
         ),
       );
+      if (settledAgent) {
+        setSettlementSuccess({
+          agentName: settledAgent.name,
+          market: nextActive.market,
+          signalId: nextActive.onchainId,
+          stakeUsdc: nextActive.stakeUsdc,
+          txHash: nextActive.txHash,
+          correct,
+          pnlBps,
+          reputationBefore: beforeScore,
+          reputationAfter: calculateScore(settledAgent).reputation,
+          winRateBefore: beforeWinRate,
+          winRateAfter: readWinRate(settledAgent),
+          resolvedDelta: 1,
+        });
+      }
     },
     [
       signals,
+      agents,
       scenarioIndex,
       isOnchainData,
       walletAddress,
@@ -478,8 +558,11 @@ export default function DashboardProvider({
     await refreshOnchainState();
   }, [refreshOnchainState]);
 
+  const selectSignal = useCallback((signal: Signal) => setSelectedSignalId(signal.id), []);
+  const closeSignalDetails = useCallback(() => setSelectedSignalId(undefined), []);
   const clearError = useCallback(() => setWalletError(undefined), []);
   const clearPublishSuccess = useCallback(() => setPublishSuccess(undefined), []);
+  const clearSettlementSuccess = useCallback(() => setSettlementSuccess(undefined), []);
 
   const value = useMemo<DashboardContextValue>(
     () => ({
@@ -497,8 +580,10 @@ export default function DashboardProvider({
       resolverAddress,
       ownerAddress,
       agentProposal,
+      selectedSignal,
       publishStage,
       publishSuccess,
+      settlementSuccess,
       busy: { onchain: onchainBusy, claim: claimBusy, scan: scanBusy },
       connectWallet,
       disconnectWallet,
@@ -506,10 +591,13 @@ export default function DashboardProvider({
       runAgentCycle,
       publishProposal,
       dismissProposal,
+      selectSignal,
+      closeSignalDetails,
       resolveSignal,
       refreshChainState,
       clearError,
       clearPublishSuccess,
+      clearSettlementSuccess,
     }),
     [
       agents,
@@ -526,8 +614,10 @@ export default function DashboardProvider({
       resolverAddress,
       ownerAddress,
       agentProposal,
+      selectedSignal,
       publishStage,
       publishSuccess,
+      settlementSuccess,
       onchainBusy,
       claimBusy,
       scanBusy,
@@ -537,12 +627,23 @@ export default function DashboardProvider({
       runAgentCycle,
       publishProposal,
       dismissProposal,
+      selectSignal,
+      closeSignalDetails,
       resolveSignal,
       refreshChainState,
       clearError,
       clearPublishSuccess,
+      clearSettlementSuccess,
     ],
   );
 
   return <DashboardContext.Provider value={value}>{children}</DashboardContext.Provider>;
+}
+
+function readWinRate(agent: Agent | undefined): number {
+  if (!agent || agent.resolvedSignals === 0) {
+    return 0;
+  }
+
+  return agent.correctSignals / agent.resolvedSignals;
 }

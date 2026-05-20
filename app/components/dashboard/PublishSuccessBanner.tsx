@@ -3,6 +3,7 @@
 import { ArrowUpRight, BadgeCheck, CircleDollarSign, Hash, Trophy, X } from "lucide-react";
 import { useDashboard } from "./DashboardProvider";
 import { shortHash } from "../../lib/dashboard-actions";
+import { arcTxUrl } from "../../lib/explorer";
 
 const usd = (value: number) =>
   new Intl.NumberFormat("en-US", {
@@ -17,7 +18,7 @@ export default function PublishSuccessBanner() {
   const { publishSuccess, clearPublishSuccess } = useDashboard();
   if (!publishSuccess) return null;
 
-  const txUrl = `https://testnet.arcscan.app/tx/${publishSuccess.txHash}`;
+  const txUrl = arcTxUrl(publishSuccess.txHash);
   const signalLabel =
     publishSuccess.signalId !== undefined
       ? `#${publishSuccess.signalId}`

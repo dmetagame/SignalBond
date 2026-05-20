@@ -10,6 +10,8 @@ import LineChartCard from "./LineChartCard";
 import ProposalModal from "./ProposalModal";
 import PublishSuccessBanner from "./PublishSuccessBanner";
 import SectionHeader from "./SectionHeader";
+import SettlementSuccessBanner from "./SettlementSuccessBanner";
+import SignalDetailDrawer from "./SignalDetailDrawer";
 import SegmentedBreakdown from "./SegmentedBreakdown";
 import SignalTable from "./SignalTable";
 import WeekdayBars from "./WeekdayBars";
@@ -40,8 +42,10 @@ function ShellContent() {
     busy,
     runAgentCycle,
     resolveSignal,
+    selectSignal,
     refreshChainState,
     clearError,
+    isOnchainData,
   } = useDashboard();
 
   const kpis = computeKpis(agents, signals);
@@ -111,6 +115,7 @@ function ShellContent() {
         />
 
         <PublishSuccessBanner />
+        <SettlementSuccessBanner />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
@@ -176,11 +181,18 @@ function ShellContent() {
         <SignalTable
           signals={signals}
           agents={agents}
+          onSelect={selectSignal}
           onResolve={resolveSignal}
           resolving={busy.onchain}
+          settlementLocked={(signal) =>
+            isOnchainData &&
+            signal.status === "active" &&
+            new Date(signal.expiresAt).getTime() > Date.now()
+          }
         />
       </div>
       <ProposalModal />
+      <SignalDetailDrawer />
     </DashboardLayout>
   );
 }

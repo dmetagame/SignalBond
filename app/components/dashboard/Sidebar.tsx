@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useDashboard } from "./DashboardProvider";
+import SignalBondMark from "./SignalBondMark";
 
 type NavItem = {
   label: string;
@@ -121,8 +122,8 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 flex-col gap-6 border-r border-line bg-panel px-4 py-6">
       <div className="flex items-center gap-3 px-2">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-          <Radio className="size-5" strokeWidth={2} />
+        <div className="flex size-9 items-center justify-center rounded-lg bg-accent overflow-hidden">
+          <SignalBondMark size={36} />
         </div>
         <div className="flex flex-col">
           <span className="text-[15px] font-semibold tracking-tight">SignalBond</span>

@@ -15,7 +15,7 @@ const usd = (value: number) =>
 const stageLabel: Record<PublishStage, string> = {
   idle: "Publish to Arc",
   approving: "Approving USDC…",
-  publishing: "Signing createSignal…",
+  publishing: "Confirm publish in your wallet…",
   confirming: "Awaiting confirmation…",
 };
 

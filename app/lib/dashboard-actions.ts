@@ -24,6 +24,7 @@ import type { ChainState } from "./chain-state";
 import type { Agent, Direction, Signal } from "./types";
 
 const WALLET_REQUEST_TIMEOUT_MS = 120_000;
+const TX_RECEIPT_TIMEOUT_MS = 45_000;
 
 export function isBullish(direction: Direction): boolean {
   return direction === "LONG" || direction === "YES";
@@ -82,34 +83,42 @@ export async function publishSignalOnchain(
     chain: arcCanteen,
     transport: custom(window.ethereum),
   });
-  const publicClient = getPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
-  onStage?.("approving");
-  const approveHash = await walletClient.writeContract({
-    address: demoUsdcAddress,
-    abi: erc20Abi,
-    functionName: "approve",
-    args: [signalBondAddress, stakeAmount],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: approveHash });
+  const existingAllowance = await readDemoUsdcAllowance(account, signalBondAddress);
+  if (existingAllowance < stakeAmount) {
+    onStage?.("approving");
+    const approveHash = await withWalletTimeout(
+      walletClient.writeContract({
+        address: demoUsdcAddress,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [signalBondAddress, stakeAmount],
+      }),
+      "USDC approval signature",
+    );
+    await waitForApproval(approveHash, account, signalBondAddress, stakeAmount);
+  }
 
   onStage?.("publishing");
-  return walletClient.writeContract({
-    address: signalBondAddress,
-    abi: signalBondAbi,
-    functionName: "createSignal",
-    args: [
-      agentHash(signal.agentId),
-      signal.market,
-      directionToContractValue(signal.direction),
-      signal.confidenceBps,
-      stakeAmount,
-      BigInt(Math.floor(new Date(signal.expiresAt).getTime() / 1000)),
-      signal.sourceHash,
-      keccak256(stringToHex(signal.reasoning)),
-    ],
-  });
+  return withWalletTimeout(
+    walletClient.writeContract({
+      address: signalBondAddress,
+      abi: signalBondAbi,
+      functionName: "createSignal",
+      args: [
+        agentHash(signal.agentId),
+        signal.market,
+        directionToContractValue(signal.direction),
+        signal.confidenceBps,
+        stakeAmount,
+        BigInt(Math.floor(new Date(signal.expiresAt).getTime() / 1000)),
+        signal.sourceHash,
+        keccak256(stringToHex(signal.reasoning)),
+      ],
+    }),
+    "Signal publishing signature",
+  );
 }
 
 export async function resolveSignalOnchain(
@@ -183,6 +192,47 @@ export async function hasClaimedDemoUsdc(account: Address): Promise<boolean> {
     functionName: "hasClaimed",
     args: [account],
   });
+}
+
+async function readDemoUsdcAllowance(owner: Address, spender: Address): Promise<bigint> {
+  if (!demoUsdcAddress) {
+    throw new Error("Demo USDC address is not configured.");
+  }
+
+  return getPublicClient().readContract({
+    address: demoUsdcAddress,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [owner, spender],
+  });
+}
+
+async function waitForApproval(
+  approveHash: Hex,
+  owner: Address,
+  spender: Address,
+  amount: bigint,
+): Promise<void> {
+  const publicClient = getPublicClient();
+
+  try {
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: approveHash,
+      timeout: TX_RECEIPT_TIMEOUT_MS,
+    });
+    if (receipt.status === "reverted") {
+      throw new Error("USDC approval reverted on Arc.");
+    }
+    return;
+  } catch (error) {
+    const allowance = await readDemoUsdcAllowance(owner, spender);
+    if (allowance >= amount) {
+      return;
+    }
+
+    const message = normalizeError(error);
+    throw new Error(`USDC approval did not finalize. ${message}`);
+  }
 }
 
 export async function ensureArcNetwork(): Promise<Hex> {

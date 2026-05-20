@@ -58,6 +58,8 @@ import type { Agent, Direction, Signal } from "./lib/types";
 declare global {
   interface Window {
     ethereum?: {
+      on?(event: string, handler: (...args: unknown[]) => void): void;
+      removeListener?(event: string, handler: (...args: unknown[]) => void): void;
       request(args: { method: string; params?: unknown[] }): Promise<unknown>;
     };
   }
@@ -106,6 +108,9 @@ export default function DashboardClient({
     "idle" | "approving" | "publishing" | "confirming"
   >("idle");
   const [copiedHash, setCopiedHash] = useState<string>();
+  const [walletChainId, setWalletChainId] = useState<Hex>();
+  const [networkDialogOpen, setNetworkDialogOpen] = useState(false);
+  const [networkBusy, setNetworkBusy] = useState(false);
 
   const rankedAgents = useMemo(
     () =>
@@ -126,6 +131,10 @@ export default function DashboardClient({
   const topScore = calculateScore(rankedAgents[0]).reputation;
   const latestSignal = signals[0];
   const isOnchainData = dataSourceMode === "onchain";
+  const arcChainId = numberToHexChainId(arcCanteen.id);
+  const walletOnArc = walletChainId
+    ? sameChainId(walletChainId, arcChainId)
+    : false;
   const proposalSignal = useMemo(
     () =>
       agentProposal
@@ -144,7 +153,7 @@ export default function DashboardClient({
   }
 
   const refreshOnchainState = useCallback(
-    async (account = walletAddress) => {
+    async (account: Address | null | undefined = walletAddress) => {
       if (!contractsConfigured) {
         setAgents(seedAgents);
         setSignals(seedSignals);
@@ -154,7 +163,7 @@ export default function DashboardClient({
 
       setSyncState("syncing");
       try {
-        const dashboard = await fetchChainState(account);
+        const dashboard = await fetchChainState(account ?? undefined);
         applyChainState(dashboard);
         setDataSourceMode("onchain");
         setSyncState("synced");
@@ -171,6 +180,42 @@ export default function DashboardClient({
     void refreshOnchainState();
   }, [refreshOnchainState]);
 
+  useEffect(() => {
+    if (!window.ethereum?.on) return undefined;
+
+    const handleAccountsChanged = (accounts: unknown) => {
+      const [nextAccount] = Array.isArray(accounts) ? (accounts as Address[]) : [];
+      if (!nextAccount) {
+        setWalletAddress(undefined);
+        setWalletBalanceUsdc(undefined);
+        setWalletChainId(undefined);
+        setNetworkDialogOpen(false);
+        setLastOnchainTx(undefined);
+        void refreshOnchainState(null);
+        return;
+      }
+
+      setWalletAddress(nextAccount);
+      setNetworkDialogOpen(true);
+      void refreshOnchainState(nextAccount);
+      void refreshWalletChainId();
+    };
+
+    const handleChainChanged = (chainId: unknown) => {
+      if (typeof chainId === "string") {
+        setWalletChainId(chainId as Hex);
+      }
+    };
+
+    window.ethereum.on("accountsChanged", handleAccountsChanged);
+    window.ethereum.on("chainChanged", handleChainChanged);
+
+    return () => {
+      window.ethereum?.removeListener?.("accountsChanged", handleAccountsChanged);
+      window.ethereum?.removeListener?.("chainChanged", handleChainChanged);
+    };
+  }, [refreshOnchainState]);
+
   async function connectWallet() {
     setWalletError(undefined);
     if (!window.ethereum) {
@@ -183,6 +228,54 @@ export default function DashboardClient({
     })) as Address[];
     setWalletAddress(accounts[0]);
     await refreshOnchainState(accounts[0]);
+    await refreshWalletChainId();
+    await promptArcNetwork(false, accounts[0]);
+  }
+
+  async function disconnectWallet() {
+    setWalletError(undefined);
+    setWalletAddress(undefined);
+    setWalletBalanceUsdc(undefined);
+    setWalletChainId(undefined);
+    setNetworkDialogOpen(false);
+    setLastOnchainTx(undefined);
+
+    try {
+      await window.ethereum?.request({
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      // Some wallets do not expose permission revocation. Local disconnect still works.
+    }
+
+    await refreshOnchainState(null);
+  }
+
+  async function refreshWalletChainId() {
+    if (!window.ethereum) return;
+    const chainId = (await window.ethereum.request({ method: "eth_chainId" })) as Hex;
+    setWalletChainId(chainId);
+  }
+
+  async function promptArcNetwork(closeOnSuccess: boolean, account = walletAddress) {
+    if (!account) return;
+
+    setNetworkDialogOpen(true);
+    setNetworkBusy(true);
+    setWalletError(undefined);
+    try {
+      const chainId = await ensureArcNetwork();
+      setWalletChainId(chainId);
+      if (closeOnSuccess) {
+        setNetworkDialogOpen(false);
+      }
+    } catch (error) {
+      setWalletError(normalizeError(error));
+      setNetworkDialogOpen(true);
+    } finally {
+      setNetworkBusy(false);
+    }
   }
 
   async function claimDemoUsdc() {
@@ -362,9 +455,23 @@ export default function DashboardClient({
       <TopBar
         activeSignals={activeSignals.length}
         onConnect={connectWallet}
+        onDisconnect={disconnectWallet}
+        onNetworkOpen={() => setNetworkDialogOpen(true)}
+        networkReady={walletOnArc}
         totalStake={totalStake}
         walletAddress={walletAddress}
       />
+
+      {networkDialogOpen && walletAddress ? (
+        <NetworkDialog
+          busy={networkBusy}
+          chainId={walletChainId}
+          onClose={() => setNetworkDialogOpen(false)}
+          onSwitch={() => promptArcNetwork(true)}
+          ready={walletOnArc}
+          walletAddress={walletAddress}
+        />
+      ) : null}
 
       <section className="tape" aria-label="Market tape">
         {marketTape.map((item) => (
@@ -843,14 +950,95 @@ function publishStageLabel(stage: "idle" | "approving" | "publishing" | "confirm
   }
 }
 
+function NetworkDialog({
+  busy,
+  chainId,
+  onClose,
+  onSwitch,
+  ready,
+  walletAddress,
+}: {
+  busy: boolean;
+  chainId?: Hex;
+  onClose: () => void;
+  onSwitch: () => void;
+  ready: boolean;
+  walletAddress: Address;
+}) {
+  return (
+    <div className="network-overlay" role="dialog" aria-modal="true">
+      <section className="network-card" aria-label="Wallet network">
+        <div className="proposal-head">
+          <div>
+            <span className="eyebrow">Wallet Network</span>
+            <h2>{ready ? "Arc Testnet ready" : "Switch to Arc Testnet"}</h2>
+          </div>
+          <button
+            aria-label="Close network dialog"
+            className="icon-button"
+            disabled={busy}
+            onClick={onClose}
+            title="Close"
+            type="button"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="network-summary">
+          <div>
+            <span>Wallet</span>
+            <strong>{shortHash(walletAddress)}</strong>
+          </div>
+          <div>
+            <span>Current chain</span>
+            <strong className={ready ? "positive" : "negative"}>
+              {chainId ?? "unknown"}
+            </strong>
+          </div>
+          <div>
+            <span>Target chain</span>
+            <strong>{numberToHexChainId(arcCanteen.id)}</strong>
+          </div>
+          <div>
+            <span>RPC</span>
+            <strong>{arcCanteen.rpcUrls.default.http[0]}</strong>
+          </div>
+        </div>
+
+        <div className="network-actions">
+          <button className="secondary-action" disabled={busy} onClick={onClose} type="button">
+            Later
+          </button>
+          <button
+            className="primary-action"
+            disabled={busy}
+            onClick={ready ? onClose : onSwitch}
+            type="button"
+          >
+            <WalletCards aria-hidden="true" />
+            {busy ? "Opening wallet..." : ready ? "Continue" : "Switch Network"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function TopBar({
   activeSignals,
   onConnect,
+  onDisconnect,
+  onNetworkOpen,
+  networkReady,
   totalStake,
   walletAddress,
 }: {
   activeSignals: number;
   onConnect: () => void;
+  onDisconnect: () => void;
+  onNetworkOpen: () => void;
+  networkReady: boolean;
   totalStake: number;
   walletAddress?: Address;
 }) {
@@ -870,10 +1058,32 @@ function TopBar({
         <strong>{activeSignals} live</strong>
         <strong>{formatUsdc(totalStake)} staked</strong>
       </div>
-      <button className="wallet-button" onClick={onConnect} type="button">
-        <WalletCards aria-hidden="true" />
-        {walletAddress ? shortHash(walletAddress) : "Connect"}
-      </button>
+      {walletAddress ? (
+        <div className="wallet-cluster">
+          <button
+            className={`wallet-button connected ${networkReady ? "ready" : "needs-network"}`}
+            onClick={onNetworkOpen}
+            type="button"
+          >
+            <WalletCards aria-hidden="true" />
+            <span>{shortHash(walletAddress)}</span>
+          </button>
+          <button
+            aria-label="Disconnect wallet"
+            className="wallet-disconnect"
+            onClick={onDisconnect}
+            title="Disconnect wallet"
+            type="button"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      ) : (
+        <button className="wallet-button" onClick={onConnect} type="button">
+          <WalletCards aria-hidden="true" />
+          Connect
+        </button>
+      )}
     </header>
   );
 }
@@ -1095,7 +1305,7 @@ async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
   });
 }
 
-async function ensureArcNetwork() {
+async function ensureArcNetwork(): Promise<Hex> {
   if (!window.ethereum) {
     throw new Error("No injected wallet found.");
   }
@@ -1106,7 +1316,7 @@ async function ensureArcNetwork() {
   })) as string;
 
   if (currentChainId.toLowerCase() === chainId.toLowerCase()) {
-    return;
+    return chainId;
   }
 
   try {
@@ -1130,11 +1340,21 @@ async function ensureArcNetwork() {
         },
       ],
     });
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId }],
+    });
   }
+
+  return chainId;
 }
 
 function numberToHexChainId(value: number): Hex {
   return `0x${value.toString(16)}`;
+}
+
+function sameChainId(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
 }
 
 function isUnknownChainError(error: unknown): boolean {

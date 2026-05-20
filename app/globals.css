@@ -78,6 +78,8 @@ button {
 .brand-lockup,
 .topbar-center,
 .wallet-button,
+.wallet-cluster,
+.wallet-disconnect,
 .hero-actions,
 .section-head,
 .proposal-actions,
@@ -110,6 +112,7 @@ button {
 
 .brand-mark svg,
 .wallet-button svg,
+.wallet-disconnect svg,
 .primary-action svg,
 .secondary-action svg,
 .hash-copy svg,
@@ -176,10 +179,56 @@ button {
   padding: 0 14px;
 }
 
+.wallet-cluster {
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .wallet-button,
 .secondary-action {
   background: var(--panel-3);
   border: 1px solid var(--line);
+}
+
+.wallet-button.connected {
+  position: relative;
+}
+
+.wallet-button.connected::after {
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  width: 7px;
+}
+
+.wallet-button.connected.ready::after {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(212, 255, 62, 0.12);
+}
+
+.wallet-button.connected.needs-network::after {
+  background: var(--gold);
+  box-shadow: 0 0 0 3px rgba(245, 184, 75, 0.12);
+}
+
+.wallet-disconnect {
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  height: 40px;
+  justify-content: center;
+  padding: 0;
+  width: 40px;
+}
+
+.wallet-disconnect:hover {
+  border-color: rgba(255, 99, 112, 0.36);
+  color: var(--red);
 }
 
 .primary-action {
@@ -232,6 +281,71 @@ button {
 .hash-copy.copied {
   border-color: rgba(212, 255, 62, 0.32);
   color: var(--green);
+}
+
+.network-overlay {
+  align-items: flex-start;
+  background: rgba(7, 8, 7, 0.72);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 88px 16px 16px;
+  position: fixed;
+  z-index: 40;
+}
+
+.network-card {
+  background: rgba(13, 15, 14, 0.98);
+  border: 1px solid rgba(212, 255, 62, 0.24);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 560px;
+  padding: 16px;
+  width: 100%;
+}
+
+.network-card h2 {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.network-summary {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.network-summary div {
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.network-summary span {
+  color: var(--muted);
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.network-summary strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.network-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 .mode-strip {
@@ -919,6 +1033,15 @@ code {
   }
 
   .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .network-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .network-actions {
     align-items: stretch;
     flex-direction: column;
   }

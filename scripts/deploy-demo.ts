@@ -67,7 +67,7 @@ console.log(
     {
       deployer: account.address,
       chainId: arcCanteen.id,
-      rpcUrl: arcCanteen.rpcUrls.default.http[0],
+      rpcConfigured: Boolean(process.env.ARC_RPC_URL),
       mockUsdc,
       signalBond,
       deployerDemoUsdc: formatUnits(deployerBalance, 6),

@@ -42,10 +42,10 @@ The deploy script prints the frontend environment values:
 NEXT_PUBLIC_DEMO_USDC_ADDRESS=0x...
 NEXT_PUBLIC_SIGNALBOND_ADDRESS=0x...
 NEXT_PUBLIC_ARC_CHAIN_ID=...
-NEXT_PUBLIC_ARC_RPC_URL=https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>
+ARC_RPC_URL=https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>
 ```
 
-Set those in Vercel, redeploy, and the dashboard switches from local simulation to wallet-backed signal publishing.
+Set those in Vercel, redeploy, and the dashboard switches from local simulation to wallet-backed signal publishing. Keep `ARC_RPC_URL` server-only. Do not expose the keyed Canteen URL through a `NEXT_PUBLIC_` variable.
 
 Agora requires Arc Testnet through Canteen's RPC node:
 
@@ -61,10 +61,10 @@ Network details:
 - Network: Arc Testnet
 - Chain ID: `5042002` (`0x4cef52`)
 - Currency: `USDC`
-- Canteen RPC: `https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>`
+- Canteen RPC: `https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>` via server-only `ARC_RPC_URL`
 - Explorer: `https://testnet.arcscan.app`
 
-The app falls back to Arc's public testnet RPC for local development if `NEXT_PUBLIC_ARC_RPC_URL` is not set. Production should use the Canteen RPC from `arc-canteen rpc-url`.
+Server reads fall back to Arc's public testnet RPC for local development if `ARC_RPC_URL` is not set. Browser wallet flows use the connected wallet provider and the public Arc fallback for network registration.
 
 ## Hackathon Positioning
 

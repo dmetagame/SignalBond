@@ -1,5 +1,11 @@
 import { defineChain, isAddress, type Address } from "viem";
 
+const publicArcRpcUrl = "https://rpc.testnet.arc.network";
+const arcRpcUrl =
+  typeof window === "undefined"
+    ? process.env.ARC_RPC_URL ?? publicArcRpcUrl
+    : publicArcRpcUrl;
+
 export const arcCanteen = defineChain({
   id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 5_042_002),
   name: "Arc Testnet",
@@ -10,7 +16,7 @@ export const arcCanteen = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_ARC_RPC_URL ?? "https://rpc.testnet.arc.network"],
+      http: [arcRpcUrl],
     },
   },
 });

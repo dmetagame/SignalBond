@@ -42,11 +42,29 @@ The deploy script prints the frontend environment values:
 NEXT_PUBLIC_DEMO_USDC_ADDRESS=0x...
 NEXT_PUBLIC_SIGNALBOND_ADDRESS=0x...
 NEXT_PUBLIC_ARC_CHAIN_ID=...
+NEXT_PUBLIC_ARC_RPC_URL=https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>
 ```
 
 Set those in Vercel, redeploy, and the dashboard switches from local simulation to wallet-backed signal publishing.
 
-Default Arc config uses Arc Testnet chain ID `5042002` and RPC `https://rpc.testnet.arc.network`. Override with `NEXT_PUBLIC_ARC_RPC_URL` if you want the Canteen-hosted RPC.
+Agora requires Arc Testnet through Canteen's RPC node:
+
+```bash
+uv tool install git+https://github.com/the-canteen-dev/ARC-cli.git
+arc-canteen login
+arc-canteen rpc eth_chainId # 0x4cef52
+arc-canteen rpc-url         # https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>
+```
+
+Network details:
+
+- Network: Arc Testnet
+- Chain ID: `5042002` (`0x4cef52`)
+- Currency: `USDC`
+- Canteen RPC: `https://rpc.testnet.arc-node.thecanteenapp.com/v1/<key>`
+- Explorer: `https://testnet.arcscan.app`
+
+The app falls back to Arc's public testnet RPC for local development if `NEXT_PUBLIC_ARC_RPC_URL` is not set. Production should use the Canteen RPC from `arc-canteen rpc-url`.
 
 ## Hackathon Positioning
 

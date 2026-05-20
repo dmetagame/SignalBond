@@ -22,6 +22,7 @@ import {
 } from "./agent-scan";
 import type { ChainState } from "./chain-state";
 import type { Agent, Direction, Signal } from "./types";
+import { getWalletPublicClient, hasInjectedWallet } from "./wallet-provider";
 
 const WALLET_REQUEST_TIMEOUT_MS = 120_000;
 const TX_RECEIPT_TIMEOUT_MS = 45_000;
@@ -83,9 +84,14 @@ export async function publishSignalOnchain(
     chain: arcCanteen,
     transport: custom(window.ethereum),
   });
+  const walletPublicClient = getWalletPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
-  const existingAllowance = await readDemoUsdcAllowance(account, signalBondAddress);
+  const existingAllowance = await readDemoUsdcAllowance(
+    account,
+    signalBondAddress,
+    walletPublicClient,
+  );
   if (existingAllowance < stakeAmount) {
     onStage?.("approving");
     const approveHash = await withWalletTimeout(
@@ -97,7 +103,13 @@ export async function publishSignalOnchain(
       }),
       "USDC approval signature",
     );
-    await waitForApproval(approveHash, account, signalBondAddress, stakeAmount);
+    await waitForApproval(
+      approveHash,
+      account,
+      signalBondAddress,
+      stakeAmount,
+      walletPublicClient,
+    );
   }
 
   onStage?.("publishing");
@@ -186,7 +198,7 @@ export async function hasClaimedDemoUsdc(account: Address): Promise<boolean> {
     throw new Error("Demo USDC address is not configured.");
   }
 
-  return getPublicClient().readContract({
+  return getBrowserSafePublicClient().readContract({
     address: demoUsdcAddress,
     abi: erc20Abi,
     functionName: "hasClaimed",
@@ -194,12 +206,16 @@ export async function hasClaimedDemoUsdc(account: Address): Promise<boolean> {
   });
 }
 
-async function readDemoUsdcAllowance(owner: Address, spender: Address): Promise<bigint> {
+async function readDemoUsdcAllowance(
+  owner: Address,
+  spender: Address,
+  publicClient = getBrowserSafePublicClient(),
+): Promise<bigint> {
   if (!demoUsdcAddress) {
     throw new Error("Demo USDC address is not configured.");
   }
 
-  return getPublicClient().readContract({
+  return publicClient.readContract({
     address: demoUsdcAddress,
     abi: erc20Abi,
     functionName: "allowance",
@@ -212,9 +228,8 @@ async function waitForApproval(
   owner: Address,
   spender: Address,
   amount: bigint,
+  publicClient = getBrowserSafePublicClient(),
 ): Promise<void> {
-  const publicClient = getPublicClient();
-
   try {
     const receipt = await publicClient.waitForTransactionReceipt({
       hash: approveHash,
@@ -233,6 +248,10 @@ async function waitForApproval(
     const message = normalizeError(error);
     throw new Error(`USDC approval did not finalize. ${message}`);
   }
+}
+
+function getBrowserSafePublicClient() {
+  return hasInjectedWallet() ? getWalletPublicClient() : getPublicClient();
 }
 
 export async function ensureArcNetwork(): Promise<Hex> {
@@ -345,9 +364,18 @@ export function shortHash(hash?: string): string {
 
 export function normalizeError(error: unknown): string {
   if (error instanceof Error) {
-    return error.message;
+    return sanitizeErrorMessage(error.message);
   }
   return "Transaction failed.";
+}
+
+function sanitizeErrorMessage(message: string): string {
+  return message
+    .replace(
+      /https:\/\/rpc\.testnet\.arc-node\.thecanteenapp\.com\/v1\/[A-Za-z0-9_-]+/g,
+      "[Arc RPC endpoint]",
+    )
+    .replace(/swrm_[A-Za-z0-9_-]+/g, "[Arc RPC token]");
 }
 
 export function withWalletTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
@@ -368,14 +396,4 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
       .then(resolve, reject)
       .finally(() => globalThis.clearTimeout(timeout));
   });
-}
-
-declare global {
-  interface Window {
-    ethereum?: {
-      on?(event: string, handler: (...args: unknown[]) => void): void;
-      removeListener?(event: string, handler: (...args: unknown[]) => void): void;
-      request(args: { method: string; params?: unknown[] }): Promise<unknown>;
-    };
-  }
 }

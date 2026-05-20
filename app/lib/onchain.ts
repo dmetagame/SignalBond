@@ -16,6 +16,7 @@ import {
   signalBondAbi,
   signalBondAddress,
 } from "./contract";
+import { getWalletPublicClient, hasInjectedWallet } from "./wallet-provider";
 
 const MAX_SIGNALS_TO_READ = 40;
 const LOG_LOOKBACK_BLOCKS = 250_000n;
@@ -73,7 +74,8 @@ export function agentHash(agentId: string): Hex {
 }
 
 export async function waitForOnchainTx(hash: Hex) {
-  const receipt = await getPublicClient().waitForTransactionReceipt({
+  const publicClient = hasInjectedWallet() ? getWalletPublicClient() : getPublicClient();
+  const receipt = await publicClient.waitForTransactionReceipt({
     hash,
     timeout: TX_CONFIRMATION_TIMEOUT_MS,
   });

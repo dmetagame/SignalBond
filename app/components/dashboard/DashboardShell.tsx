@@ -8,6 +8,7 @@ import Gauge from "./Gauge";
 import KpiCard from "./KpiCard";
 import LineChartCard from "./LineChartCard";
 import ProposalModal from "./ProposalModal";
+import PublishSuccessBanner from "./PublishSuccessBanner";
 import SectionHeader from "./SectionHeader";
 import SegmentedBreakdown from "./SegmentedBreakdown";
 import SignalTable from "./SignalTable";
@@ -108,6 +109,8 @@ function ShellContent() {
             </>
           }
         />
+
+        <PublishSuccessBanner />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard

@@ -80,6 +80,9 @@ button {
 .wallet-button,
 .hero-actions,
 .section-head,
+.proposal-actions,
+.proposal-agent,
+.proposal-head,
 .agent-row,
 .side,
 .metric,
@@ -109,6 +112,8 @@ button {
 .wallet-button svg,
 .primary-action svg,
 .secondary-action svg,
+.hash-copy svg,
+.icon-button svg,
 .section-head svg,
 .side svg,
 .metric-icon svg,
@@ -195,6 +200,40 @@ button {
   opacity: 0.68;
 }
 
+.icon-button,
+.hash-copy {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--mono);
+  font-size: 11px;
+  gap: 6px;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 8px;
+}
+
+.icon-button {
+  height: 34px;
+  padding: 0;
+  width: 34px;
+}
+
+.icon-button:disabled,
+.hash-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.hash-copy.copied {
+  border-color: rgba(212, 255, 62, 0.32);
+  color: var(--green);
+}
+
 .mode-strip {
   align-items: center;
   background: rgba(23, 27, 25, 0.74);
@@ -260,6 +299,118 @@ button {
   background: rgba(101, 214, 255, 0.12);
   border-color: rgba(101, 214, 255, 0.22);
   color: var(--cyan);
+}
+
+.proposal-ticket {
+  background: linear-gradient(180deg, rgba(18, 21, 20, 0.98), rgba(13, 15, 14, 0.94));
+  border: 1px solid rgba(212, 255, 62, 0.24);
+  border-radius: 7px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  margin-bottom: 12px;
+  padding: 14px;
+}
+
+.proposal-head {
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.proposal-head h2 {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.proposal-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.proposal-primary {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.proposal-agent {
+  gap: 10px;
+}
+
+.proposal-agent strong {
+  display: block;
+  font-size: 14px;
+}
+
+.proposal-agent em,
+.proposal-ticket p,
+.proposal-actions span,
+.proposal-stat span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-style: normal;
+  letter-spacing: 0;
+}
+
+.proposal-ticket p {
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 12px 0;
+}
+
+.proposal-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.proposal-sources span {
+  background: rgba(101, 214, 255, 0.1);
+  border: 1px solid rgba(101, 214, 255, 0.22);
+  border-radius: 999px;
+  color: #b6edff;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 6px 8px;
+}
+
+.proposal-metrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proposal-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  min-height: 78px;
+  padding: 12px;
+}
+
+.proposal-stat strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 20px;
+  margin-top: 9px;
+}
+
+.proposal-audit {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.proposal-actions {
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 12px;
 }
 
 .tape {
@@ -698,6 +849,18 @@ button {
   padding: 8px 9px;
 }
 
+.proposal-audit .hash-row {
+  margin-top: 0;
+}
+
+.hash-row code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 code {
   color: var(--green);
   font-family: var(--mono);
@@ -718,6 +881,8 @@ code {
   .topbar,
   .hero-strip,
   .board-layout,
+  .proposal-audit,
+  .proposal-grid,
   .command-grid {
     grid-template-columns: 1fr;
   }
@@ -727,7 +892,8 @@ code {
   }
 
   .tape,
-  .metric-grid {
+  .metric-grid,
+  .proposal-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -747,11 +913,17 @@ code {
 
   .tape,
   .metric-grid,
-  .agent-stats {
+  .agent-stats,
+  .proposal-metrics {
     grid-template-columns: 1fr;
   }
 
   .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .proposal-actions {
     align-items: stretch;
     flex-direction: column;
   }

@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   Blocks,
   Bot,
+  Copy,
   CircleDollarSign,
   Gauge,
   Layers3,
@@ -15,6 +16,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  X,
   TimerReset,
   Trophy,
   WalletCards,
@@ -98,6 +100,12 @@ export default function DashboardClient({
   const [ownerAddress, setOwnerAddress] = useState<Address | undefined>(
     initialChainState?.owner,
   );
+  const [agentProposal, setAgentProposal] = useState<AgentScan>();
+  const [scanBusy, setScanBusy] = useState(false);
+  const [publishStage, setPublishStage] = useState<
+    "idle" | "approving" | "publishing" | "confirming"
+  >("idle");
+  const [copiedHash, setCopiedHash] = useState<string>();
 
   const rankedAgents = useMemo(
     () =>
@@ -118,6 +126,13 @@ export default function DashboardClient({
   const topScore = calculateScore(rankedAgents[0]).reputation;
   const latestSignal = signals[0];
   const isOnchainData = dataSourceMode === "onchain";
+  const proposalSignal = useMemo(
+    () =>
+      agentProposal
+        ? scanToSignal(agentProposal, `proposal-${agentProposal.sourceHash}`)
+        : undefined,
+    [agentProposal],
+  );
 
   function applyChainState(dashboard: ChainState) {
     setAgents(dashboard.agents);
@@ -195,59 +210,76 @@ export default function DashboardClient({
   }
 
   async function runAgentCycle() {
-    const scan = await fetchAgentScan(scenarioIndex);
-    const nextId = `sig-${1843 + signals.length + scenarioIndex}`;
+    setScanBusy(true);
+    setWalletError(undefined);
+    try {
+      const scan = await fetchAgentScan(scenarioIndex);
+      setAgentProposal(scan);
+      setSelectedAgentId(scan.agentId);
+      setScenarioIndex((value) => value + 1);
+    } catch (error) {
+      setWalletError(normalizeError(error));
+    } finally {
+      setScanBusy(false);
+    }
+  }
 
-    const nextSignal: Signal = {
-      id: nextId,
-      agentId: scan.agentId,
-      market: scan.market,
-      venue: scan.venue,
-      direction: scan.direction,
-      confidenceBps: scan.confidenceBps,
-      stakeUsdc: scan.stakeUsdc,
-      entryPrice: scan.entryPrice,
-      targetPrice: scan.targetPrice,
-      createdAt: scan.generatedAt,
-      expiresAt: scan.expiresAt,
-      status: "active",
-      sourceHash: scan.sourceHash,
-      txHash: pseudoHash(`${nextId}:${scan.market}:tx`),
-      reasoning: scan.reasoning,
-      sources: scan.sources,
-    };
+  async function publishAgentProposal() {
+    if (!proposalSignal || !agentProposal) return;
 
     let onchainTxHash: Hex | undefined;
     let publishedOnchain = false;
 
     if (contractsConfigured) {
       if (!walletAddress) {
-        setWalletError("Connect wallet to publish this signal on Arc. Simulation still updated locally.");
-      } else {
-        setOnchainBusy(true);
-        setWalletError(undefined);
-        try {
-          onchainTxHash = await publishSignalOnchain(nextSignal, walletAddress);
-          setLastOnchainTx(onchainTxHash);
-          await waitForOnchainTx(onchainTxHash);
-          await refreshOnchainState(walletAddress);
-          publishedOnchain = true;
-        } catch (error) {
-          setWalletError(normalizeError(error));
-        } finally {
-          setOnchainBusy(false);
-        }
+        setWalletError("Connect wallet before publishing this signal to Arc.");
+        return;
+      }
+
+      setOnchainBusy(true);
+      setWalletError(undefined);
+      try {
+        setPublishStage("approving");
+        onchainTxHash = await publishSignalOnchain(
+          proposalSignal,
+          walletAddress,
+          (stage) => setPublishStage(stage),
+        );
+        setLastOnchainTx(onchainTxHash);
+        setPublishStage("confirming");
+        await waitForOnchainTx(onchainTxHash);
+        await refreshOnchainState(walletAddress);
+        publishedOnchain = true;
+        setAgentProposal(undefined);
+      } catch (error) {
+        setWalletError(normalizeError(error));
+      } finally {
+        setPublishStage("idle");
+        setOnchainBusy(false);
       }
     }
 
-    if (!publishedOnchain) {
+    if (!publishedOnchain && !contractsConfigured) {
       setSignals((current) => [
-        { ...nextSignal, txHash: onchainTxHash ?? nextSignal.txHash },
+        { ...proposalSignal, txHash: onchainTxHash ?? proposalSignal.txHash },
         ...current,
       ]);
+      setAgentProposal(undefined);
     }
-    setSelectedAgentId(scan.agentId);
-    setScenarioIndex((value) => value + 1);
+  }
+
+  async function copyHash(value?: string) {
+    if (!value) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedHash(value);
+      window.setTimeout(() => {
+        setCopiedHash((current) => (current === value ? undefined : current));
+      }, 1400);
+    } catch {
+      setWalletError("Clipboard access is unavailable in this browser.");
+    }
   }
 
   async function resolveSignal() {
@@ -399,14 +431,19 @@ export default function DashboardClient({
               </button>
               <button
                 className="primary-action"
-                disabled={onchainBusy}
+                disabled={scanBusy || onchainBusy}
                 onClick={runAgentCycle}
                 type="button"
               >
                 <Play aria-hidden="true" />
-                {onchainBusy ? "Publishing..." : "Run Agent Cycle"}
+                {scanBusy ? "Scanning..." : "Run Agent Cycle"}
               </button>
-              <button className="secondary-action" onClick={resolveSignal} type="button">
+              <button
+                className="secondary-action"
+                disabled={onchainBusy}
+                onClick={resolveSignal}
+                type="button"
+              >
                 <ShieldCheck aria-hidden="true" />
                 Resolve Signal
               </button>
@@ -458,6 +495,20 @@ export default function DashboardClient({
             </button>
             {walletError ? <strong>{walletError}</strong> : null}
           </div>
+
+          {agentProposal && proposalSignal ? (
+            <AgentProposalTicket
+              agent={agents.find((agent) => agent.id === agentProposal.agentId)}
+              copiedHash={copiedHash}
+              onCopyHash={copyHash}
+              onDismiss={() => setAgentProposal(undefined)}
+              onPublish={publishAgentProposal}
+              publishStage={publishStage}
+              publishing={onchainBusy}
+              scan={agentProposal}
+              signal={proposalSignal}
+            />
+          ) : null}
 
           <div className="metric-grid">
             <Metric icon={<Gauge />} label="Top reputation" value={topScore.toFixed(1)} />
@@ -595,19 +646,201 @@ export default function DashboardClient({
               {latestSignal?.reasoning ??
                 "The next agent cycle will write a source hash, stake amount, and market direction to Arc."}
             </p>
-            <div className="hash-row">
-              <span>tx</span>
-              <code>{shortHash(latestSignal?.txHash)}</code>
-            </div>
-            <div className="hash-row">
-              <span>source</span>
-              <code>{shortHash(latestSignal?.sourceHash)}</code>
-            </div>
+            <HashRow
+              copied={copiedHash === latestSignal?.txHash}
+              label="tx"
+              onCopy={copyHash}
+              value={latestSignal?.txHash}
+            />
+            <HashRow
+              copied={copiedHash === latestSignal?.sourceHash}
+              label="source"
+              onCopy={copyHash}
+              value={latestSignal?.sourceHash}
+            />
           </div>
         </aside>
       </section>
     </main>
   );
+}
+
+function AgentProposalTicket({
+  agent,
+  copiedHash,
+  onCopyHash,
+  onDismiss,
+  onPublish,
+  publishing,
+  publishStage,
+  scan,
+  signal,
+}: {
+  agent?: Agent;
+  copiedHash?: string;
+  onCopyHash: (value?: string) => void;
+  onDismiss: () => void;
+  onPublish: () => void;
+  publishing: boolean;
+  publishStage: "idle" | "approving" | "publishing" | "confirming";
+  scan: AgentScan;
+  signal: Signal;
+}) {
+  const explanationHash = keccak256(stringToHex(scan.reasoning));
+  const moveBps = Math.round(
+    ((scan.targetPrice - scan.entryPrice) / scan.entryPrice) * 10_000,
+  );
+
+  return (
+    <section className="proposal-ticket" aria-label="Agent proposal">
+      <div className="proposal-head">
+        <div>
+          <span className="eyebrow">Agent Proposal</span>
+          <h2>{scan.market}</h2>
+        </div>
+        <button
+          aria-label="Dismiss proposal"
+          className="icon-button"
+          disabled={publishing}
+          onClick={onDismiss}
+          title="Dismiss proposal"
+          type="button"
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="proposal-grid">
+        <div className="proposal-primary">
+          <div className="proposal-agent">
+            <span
+              className="agent-mark"
+              style={{ backgroundColor: agent?.color ?? "var(--green)" }}
+            />
+            <div>
+              <strong>{agent?.name ?? shortHash(scan.agentId)}</strong>
+              <em>{agent?.handle ?? scan.agentId} / {scan.venue}</em>
+            </div>
+          </div>
+          <p>{scan.reasoning}</p>
+          <div className="proposal-sources">
+            {scan.sources.map((source) => (
+              <span key={source}>{source}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="proposal-metrics">
+          <ProposalStat
+            label="Side"
+            tone={isBullish(scan.direction) ? "positive" : "negative"}
+            value={scan.direction}
+          />
+          <ProposalStat
+            label="Confidence"
+            value={`${(scan.confidenceBps / 100).toFixed(1)}%`}
+          />
+          <ProposalStat label="Stake" value={formatUsdc(scan.stakeUsdc)} />
+          <ProposalStat
+            label="Target move"
+            tone={moveBps >= 0 ? "positive" : "negative"}
+            value={formatBps(moveBps)}
+          />
+        </div>
+      </div>
+
+      <div className="proposal-audit">
+        <HashRow
+          copied={copiedHash === signal.sourceHash}
+          label="source hash"
+          onCopy={onCopyHash}
+          value={signal.sourceHash}
+        />
+        <HashRow
+          copied={copiedHash === explanationHash}
+          label="reason hash"
+          onCopy={onCopyHash}
+          value={explanationHash}
+        />
+        <div className="hash-row">
+          <span>expires</span>
+          <code>{new Date(scan.expiresAt).toLocaleString()}</code>
+        </div>
+      </div>
+
+      <div className="proposal-actions">
+        <span>{publishStageLabel(publishStage)}</span>
+        <button
+          className="primary-action"
+          disabled={publishing}
+          onClick={onPublish}
+          type="button"
+        >
+          <RadioTower aria-hidden="true" />
+          {publishing ? "Publishing..." : "Publish Signal"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ProposalStat({
+  label,
+  tone,
+  value,
+}: {
+  label: string;
+  tone?: "positive" | "negative";
+  value: string;
+}) {
+  return (
+    <div className="proposal-stat">
+      <span>{label}</span>
+      <strong className={tone}>{value}</strong>
+    </div>
+  );
+}
+
+function HashRow({
+  copied,
+  label,
+  onCopy,
+  value,
+}: {
+  copied?: boolean;
+  label: string;
+  onCopy: (value?: string) => void;
+  value?: string;
+}) {
+  return (
+    <div className="hash-row">
+      <span>{label}</span>
+      <code>{shortHash(value)}</code>
+      <button
+        aria-label={`Copy ${label}`}
+        className={`hash-copy ${copied ? "copied" : ""}`}
+        disabled={!value}
+        onClick={() => onCopy(value)}
+        title={copied ? "Copied" : `Copy ${label}`}
+        type="button"
+      >
+        <Copy aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+function publishStageLabel(stage: "idle" | "approving" | "publishing" | "confirming") {
+  switch (stage) {
+    case "approving":
+      return "Approval pending";
+    case "publishing":
+      return "Create signal pending";
+    case "confirming":
+      return "Waiting for Arc finality";
+    case "idle":
+      return "Ready to publish";
+  }
 }
 
 function TopBar({
@@ -737,7 +970,32 @@ function resetAgentStats(agent: Agent): Agent {
   };
 }
 
-async function publishSignalOnchain(signal: Signal, account: Address): Promise<Hex> {
+function scanToSignal(scan: AgentScan, id: string): Signal {
+  return {
+    id,
+    agentId: scan.agentId,
+    market: scan.market,
+    venue: scan.venue,
+    direction: scan.direction,
+    confidenceBps: scan.confidenceBps,
+    stakeUsdc: scan.stakeUsdc,
+    entryPrice: scan.entryPrice,
+    targetPrice: scan.targetPrice,
+    createdAt: scan.generatedAt,
+    expiresAt: scan.expiresAt,
+    status: "active",
+    sourceHash: scan.sourceHash,
+    txHash: pseudoHash(`${id}:${scan.market}:tx`),
+    reasoning: scan.reasoning,
+    sources: scan.sources,
+  };
+}
+
+async function publishSignalOnchain(
+  signal: Signal,
+  account: Address,
+  onStage?: (stage: "approving" | "publishing" | "confirming") => void,
+): Promise<Hex> {
   if (!window.ethereum) {
     throw new Error("No injected wallet found.");
   }
@@ -745,6 +1003,8 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
   if (!signalBondAddress || !demoUsdcAddress) {
     throw new Error("Contract addresses are not configured.");
   }
+
+  await ensureArcNetwork();
 
   const walletClient = createWalletClient({
     account,
@@ -754,6 +1014,7 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
   const publicClient = getPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
+  onStage?.("approving");
   const approveHash = await walletClient.writeContract({
     address: demoUsdcAddress,
     abi: erc20Abi,
@@ -762,6 +1023,7 @@ async function publishSignalOnchain(signal: Signal, account: Address): Promise<H
   });
   await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
+  onStage?.("publishing");
   return walletClient.writeContract({
     address: signalBondAddress,
     abi: signalBondAbi,
@@ -793,6 +1055,8 @@ async function resolveSignalOnchain(
     throw new Error("SignalBond address or onchain signal id is not configured.");
   }
 
+  await ensureArcNetwork();
+
   const walletClient = createWalletClient({
     account,
     chain: arcCanteen,
@@ -816,6 +1080,8 @@ async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
     throw new Error("Demo USDC address is not configured.");
   }
 
+  await ensureArcNetwork();
+
   const walletClient = createWalletClient({
     account,
     chain: arcCanteen,
@@ -827,6 +1093,57 @@ async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
     abi: erc20Abi,
     functionName: "claim",
   });
+}
+
+async function ensureArcNetwork() {
+  if (!window.ethereum) {
+    throw new Error("No injected wallet found.");
+  }
+
+  const chainId = numberToHexChainId(arcCanteen.id);
+  const currentChainId = (await window.ethereum.request({
+    method: "eth_chainId",
+  })) as string;
+
+  if (currentChainId.toLowerCase() === chainId.toLowerCase()) {
+    return;
+  }
+
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId }],
+    });
+  } catch (error) {
+    if (!isUnknownChainError(error)) {
+      throw error;
+    }
+
+    await window.ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId,
+          chainName: arcCanteen.name,
+          nativeCurrency: arcCanteen.nativeCurrency,
+          rpcUrls: arcCanteen.rpcUrls.default.http,
+        },
+      ],
+    });
+  }
+}
+
+function numberToHexChainId(value: number): Hex {
+  return `0x${value.toString(16)}`;
+}
+
+function isUnknownChainError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    Number((error as { code?: unknown }).code) === 4902
+  );
 }
 
 function pseudoHash(input: string): `0x${string}` {

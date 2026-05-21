@@ -22,6 +22,7 @@ import {
 } from "viem";
 import { useDashboard } from "../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../components/dashboard/SectionHeader";
+import UnifiedBalance from "../../components/dashboard/UnifiedBalance";
 import {
   addressToBytes32,
   cctpDefaults,
@@ -341,6 +342,8 @@ export default function BridgePage() {
           )}
         </div>
 
+        <div className="flex flex-col gap-6">
+        <UnifiedBalance />
         <aside className="flex flex-col gap-3 rounded-2xl border border-line bg-panel p-6 shadow-card">
           <h3 className="text-sm font-semibold text-text">Progress</h3>
           <ol className="flex flex-col gap-2">
@@ -411,6 +414,7 @@ export default function BridgePage() {
             </div>
           )}
         </aside>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-dashed border-line-soft bg-panel-muted/30 p-4 text-xs text-muted">

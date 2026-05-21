@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
+    "@circle-fin/app-kit": "^1.6.1",
     "@circle-fin/unified-balance-kit": "^1.1.2",
     "@tailwindcss/postcss": "^4.3.0",
     "groq-sdk": "^1.2.0",

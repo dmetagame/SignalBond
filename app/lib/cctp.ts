@@ -1,8 +1,12 @@
 import { sepolia } from "viem/chains";
 import type { Address, Hex } from "viem";
+import { arcTestnetConfig, ethereumSepoliaConfig } from "./app-kit";
 
 /**
- * Circle CCTP V2 configuration for SignalBond's bridge flow.
+ * Circle CCTP V2 configuration for SignalBond's bridge flow. Contract
+ * addresses and domain IDs are sourced from `@circle-fin/app-kit`'s canonical
+ * chain definitions so the integration tracks Circle's published numbers
+ * exactly.
  *
  * The bridge uses Circle's forwarder service hook so a single Sepolia
  * transaction (depositForBurnWithHook + the magic "cctp-forward" hook) is
@@ -12,8 +16,8 @@ import type { Address, Hex } from "viem";
  */
 
 export const cctpV2 = {
-  tokenMessengerAddress: "0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA" as Address,
-  messageTransmitterAddress: "0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275" as Address,
+  tokenMessengerAddress: ethereumSepoliaConfig.cctp.tokenMessenger,
+  messageTransmitterAddress: arcTestnetConfig.cctp.messageTransmitter,
   irisBaseUrl: "https://iris-api-sandbox.circle.com",
   forwarderHook:
     "0x636374702d666f72776172640000000000000000000000000000000000000000" as Hex,
@@ -21,15 +25,14 @@ export const cctpV2 = {
 
 export const sepoliaChain = sepolia;
 
-export const sepoliaUsdcAddress =
-  "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238" as Address;
+export const sepoliaUsdcAddress: Address = ethereumSepoliaConfig.usdc;
 
 export const sourceDomains = {
-  ethereumSepolia: 0,
+  ethereumSepolia: ethereumSepoliaConfig.cctp.domain,
 } as const;
 
 export const destinationDomains = {
-  arcTestnet: 26,
+  arcTestnet: arcTestnetConfig.cctp.domain,
 } as const;
 
 /** Default fast-transfer settings per Circle's quickstart. */

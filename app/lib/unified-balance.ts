@@ -2,6 +2,7 @@ import { baseSepolia, sepolia } from "viem/chains";
 import { createPublicClient, http, type Address, type Chain } from "viem";
 import { arcCanteen, usdcAddress as arcUsdc } from "./contract";
 import { erc20Abi } from "./contract";
+import { baseSepoliaConfig, ethereumSepoliaConfig } from "./app-kit";
 
 export type UnifiedChainEntry = {
   id: string;
@@ -25,7 +26,7 @@ export const unifiedChains: (UnifiedChainEntry & { chain: Chain })[] = [
     shortName: "Sepolia",
     chainId: sepolia.id,
     chain: sepolia,
-    usdcAddress: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238" as Address,
+    usdcAddress: ethereumSepoliaConfig.usdc,
     isGatewayChain: true,
   },
   {
@@ -34,7 +35,7 @@ export const unifiedChains: (UnifiedChainEntry & { chain: Chain })[] = [
     shortName: "Base",
     chainId: baseSepolia.id,
     chain: baseSepolia,
-    usdcAddress: "0x036cbd53842c5426634e7929541ec2318f3dcf7e" as Address,
+    usdcAddress: baseSepoliaConfig.usdc,
     isGatewayChain: true,
   },
   {

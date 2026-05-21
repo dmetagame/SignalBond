@@ -163,14 +163,17 @@ The dashboard divides by 100 for display (so the headline reads `72.5` rather th
 
 ## Circle stack integration
 
-- **CCTP V2** — `/bridge` does a one-signature USDC transfer from Ethereum Sepolia to Arc Testnet by calling `depositForBurnWithHook` on Circle's TokenMessengerV2 (`0x8FE6…2DAA`) with the `cctp-forward` hook. Circle's forwarder service relays the attestation to MessageTransmitterV2 on Arc and pays the destination mint. `lib/cctp.ts` owns the configuration; the page polls Circle's Iris sandbox API (`iris-api-sandbox.circle.com`) for live status.
+- **App Kit** — `@circle-fin/app-kit` is installed and `lib/app-kit.ts` re-exports the canonical chain definitions Circle ships for Arc Testnet, Ethereum Sepolia, and Base Sepolia. Every Circle-touching surface — `lib/contract.ts` (Arc chain config, USDC address), `lib/cctp.ts` (TokenMessenger / MessageTransmitter / domain IDs), `lib/unified-balance.ts` (multi-chain USDC reads) — sources its constants from App Kit so the integration tracks Circle's published numbers verbatim. The bridge/earn action SDKs ship as server-side patterns with private-key adapters, so SignalBond keeps signing in the user's wallet and calls the underlying CCTP V2 contracts that App Kit wraps.
+- **CCTP V2** — `/bridge` does a one-signature USDC transfer from Ethereum Sepolia to Arc Testnet via `depositForBurnWithHook` on App Kit's published TokenMessengerV2 address with the `cctp-forward` hook. Circle's forwarder service relays the attestation to MessageTransmitterV2 on Arc and pays the destination mint. `lib/cctp.ts` owns the wiring; the page polls Circle's Iris sandbox API (`iris-api-sandbox.circle.com`) for live status.
+- **Gateway (unified balance)** — the Unified Balance card on `/bridge` mirrors Circle Gateway's thesis: USDC across Ethereum Sepolia, Base Sepolia, and Arc Testnet acts as a single spendable pool. Reads come from `lib/unified-balance.ts` querying each chain's published USDC token directly via viem public clients, so it works for any wallet without a prior Gateway deposit. `@circle-fin/unified-balance-kit` is installed as the upgrade path for moving stake sourcing onto the SDK's deposit/spend primitives.
+- **USDC** — the staking token is the real Arc Testnet USDC (system contract `0x3600…0000` per App Kit's `ArcTestnet.usdcAddress`). The sidebar links to `faucet.circle.com` for the canonical claim.
 - **Multi-agent aggregation** — `/markets` + `/markets/[symbol]` compute reputation-weighted consensus per market across every signal that has touched it. Each contributor's vote is `reputation × (confidenceBps / 10000)`, signed by direction. This is the "agora" coordination layer: discovery + reputation + transaction in one view.
 
 ## Roadmap
 
-- **App Kit** — sponsored-gas wallet onboarding for first-time agent followers.
-- **Gateway** — quote-driven stake sizing for cross-venue calls; would make the agent-scan `gateway-quotes` source string real.
-- **Real USDC.e stake token** — flip the staking contract from `MockUSDC` to the bridged USDC once Canteen publishes the canonical Arc Testnet address.
+- **Programmable Wallets** — Circle's wallet-as-a-service for sponsored gas and social login. Would replace the current `eth_requestAccounts` injection flow for users without MetaMask.
+- **Bridge Kit server worker** — move the CCTP burn through `@circle-fin/bridge-kit` with a service-signed adapter for users who don't hold gas on Sepolia.
+- **Gateway deposit + spend** — use the Unified Balance Kit's deposit primitives so SignalBond stakes can draw from any supported chain, not just Arc.
 
 ## License
 

@@ -1,14 +1,15 @@
 import { defineChain, isAddress, type Address } from "viem";
+import { arcTestnetConfig } from "./app-kit";
 
-const publicArcRpcUrl = "https://rpc.testnet.arc.network";
+const publicArcRpcUrl = arcTestnetConfig.rpcUrl;
 const arcRpcUrl =
   typeof window === "undefined"
     ? process.env.ARC_RPC_URL ?? publicArcRpcUrl
     : publicArcRpcUrl;
 
 export const arcCanteen = defineChain({
-  id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? 5_042_002),
-  name: "Arc Testnet",
+  id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? arcTestnetConfig.chainId),
+  name: arcTestnetConfig.name,
   nativeCurrency: {
     name: "USDC",
     symbol: "USDC",
@@ -25,16 +26,15 @@ export const signalBondAddress = readAddress(process.env.NEXT_PUBLIC_SIGNALBOND_
 
 /**
  * USDC on Arc Testnet is the native gas asset and is exposed as an
- * ERC20-compatible system contract at 0x3600…0000. We default to that so the
- * stake token matches what users hold from the Circle faucet (and what CCTP
- * mints on the destination side). `NEXT_PUBLIC_USDC_ADDRESS` and the legacy
- * `NEXT_PUBLIC_DEMO_USDC_ADDRESS` are both honored for backward compatibility.
+ * ERC20-compatible system contract. The canonical address comes from Circle
+ * App Kit's ArcTestnet chain definition so the stake token always matches what
+ * the rest of Circle's stack mints into. `NEXT_PUBLIC_USDC_ADDRESS` and the
+ * legacy `NEXT_PUBLIC_DEMO_USDC_ADDRESS` are honored for explicit overrides.
  */
-const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000" as Address;
 export const usdcAddress: Address =
   readAddress(process.env.NEXT_PUBLIC_USDC_ADDRESS) ??
   readAddress(process.env.NEXT_PUBLIC_DEMO_USDC_ADDRESS) ??
-  ARC_TESTNET_USDC;
+  arcTestnetConfig.usdc;
 
 /** Legacy alias retained so existing imports keep working during the swap. */
 export const demoUsdcAddress = usdcAddress;

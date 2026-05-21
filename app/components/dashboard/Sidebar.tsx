@@ -18,6 +18,8 @@ import {
   Wallet,
   Coins,
 } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useDashboard } from "./DashboardProvider";
 import SignalBondMark from "./SignalBondMark";
@@ -27,33 +29,32 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   href: string;
   badge?: string | number;
-  active?: boolean;
 };
 
 function buildPrimaryNav(activeSignalCount: number): NavItem[] {
   return [
-    { label: "Dashboard", icon: LayoutDashboard, href: "#", active: true },
+    { label: "Dashboard", icon: LayoutDashboard, href: "/" },
     {
       label: "Signals",
       icon: Radio,
-      href: "#",
+      href: "/signals",
       badge: activeSignalCount > 0 ? activeSignalCount : undefined,
     },
-    { label: "Agents", icon: Users, href: "#" },
-    { label: "Markets", icon: LineChart, href: "#" },
-    { label: "Settlement", icon: Scale, href: "#" },
+    { label: "Agents", icon: Users, href: "/agents" },
+    { label: "Markets", icon: LineChart, href: "/markets" },
+    { label: "Settlement", icon: Scale, href: "/settlement" },
   ];
 }
 
 const onchainNav: NavItem[] = [
-  { label: "Contracts", icon: FileCode2, href: "#" },
-  { label: "Transactions", icon: ArrowLeftRight, href: "#" },
-  { label: "Resolver log", icon: ListChecks, href: "#" },
+  { label: "Contracts", icon: FileCode2, href: "/onchain/contracts" },
+  { label: "Transactions", icon: ArrowLeftRight, href: "/onchain/transactions" },
+  { label: "Resolver log", icon: ListChecks, href: "/onchain/resolver-log" },
 ];
 
 const secondaryNav: NavItem[] = [
-  { label: "Analytics", icon: BarChart3, href: "#" },
-  { label: "Followed Agents", icon: Star, href: "#" },
+  { label: "Analytics", icon: BarChart3, href: "/analytics" },
+  { label: "Followed Agents", icon: Star, href: "/followed-agents" },
 ];
 
 const footerNav: NavItem[] = [
@@ -61,25 +62,30 @@ const footerNav: NavItem[] = [
   { label: "Help", icon: HelpCircle, href: "#" },
 ];
 
-function NavLink({ item }: { item: NavItem }) {
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  if (href === "#") return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
-  return (
-    <a
-      href={item.href}
-      className={[
-        "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
-        item.active
-          ? "bg-accent text-accent-foreground"
-          : "text-muted hover:bg-panel-muted hover:text-text",
-      ].join(" ")}
-    >
+  const className = [
+    "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+    active
+      ? "bg-accent text-accent-foreground"
+      : "text-muted hover:bg-panel-muted hover:text-text",
+  ].join(" ");
+
+  const inner = (
+    <>
       <Icon className="size-[18px] shrink-0" strokeWidth={1.75} />
       <span className="flex-1 truncate">{item.label}</span>
       {item.badge !== undefined && (
         <span
           className={[
             "rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums",
-            item.active
+            active
               ? "bg-accent-foreground/15 text-accent-foreground"
               : "bg-panel-muted text-muted",
           ].join(" ")}
@@ -87,21 +93,36 @@ function NavLink({ item }: { item: NavItem }) {
           {item.badge}
         </span>
       )}
-    </a>
+    </>
+  );
+
+  if (item.href === "#") {
+    return (
+      <span className={`${className} opacity-60 cursor-not-allowed`} aria-disabled>
+        {inner}
+      </span>
+    );
+  }
+
+  return (
+    <Link href={item.href} className={className}>
+      {inner}
+    </Link>
   );
 }
 
-function NavSection({ items }: { items: NavItem[] }) {
+function NavSection({ items, pathname }: { items: NavItem[]; pathname: string }) {
   return (
     <div className="flex flex-col gap-1">
       {items.map((item) => (
-        <NavLink key={item.label} item={item} />
+        <NavLink key={item.label} item={item} active={isActive(pathname, item.href)} />
       ))}
     </div>
   );
 }
 
 export default function Sidebar() {
+  const pathname = usePathname() ?? "/";
   const [onchainOpen, setOnchainOpen] = useState(true);
   const {
     signals,
@@ -132,7 +153,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto">
-        <NavSection items={primaryNav} />
+        <NavSection items={primaryNav} pathname={pathname} />
 
         <div className="flex flex-col gap-1">
           <button
@@ -147,14 +168,14 @@ export default function Sidebar() {
               strokeWidth={2}
             />
           </button>
-          {onchainOpen && <NavSection items={onchainNav} />}
+          {onchainOpen && <NavSection items={onchainNav} pathname={pathname} />}
         </div>
 
-        <NavSection items={secondaryNav} />
+        <NavSection items={secondaryNav} pathname={pathname} />
       </nav>
 
       <div className="flex flex-col gap-3">
-        <NavSection items={footerNav} />
+        <NavSection items={footerNav} pathname={pathname} />
 
         <div className="rounded-2xl border border-line-soft bg-panel-muted p-4">
           <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-accent-soft text-accent">

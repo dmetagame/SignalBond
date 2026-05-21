@@ -3,38 +3,22 @@
 import { Activity, AlertTriangle, BadgeCheck, CalendarRange, CircleDollarSign, Play, RefreshCw, TimerReset, Trophy, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import AgentAssistant from "./AgentAssistant";
-import DashboardLayout from "./DashboardLayout";
-import DashboardProvider, { useDashboard } from "./DashboardProvider";
+import { useDashboard } from "./DashboardProvider";
 import Gauge from "./Gauge";
 import KpiCard from "./KpiCard";
 import LineChartCard from "./LineChartCard";
-import ProposalModal from "./ProposalModal";
 import PublishSuccessBanner from "./PublishSuccessBanner";
 import SectionHeader from "./SectionHeader";
 import SettlementSuccessBanner from "./SettlementSuccessBanner";
-import SignalDetailDrawer from "./SignalDetailDrawer";
 import SegmentedBreakdown from "./SegmentedBreakdown";
 import SignalTable from "./SignalTable";
 import WeekdayBars from "./WeekdayBars";
-import type { ChainState } from "../../lib/chain-state";
 import { computeComposition } from "../../lib/composition";
 import { computeKpis } from "../../lib/kpis";
 import { computePerformance } from "../../lib/performance";
 import { computeWeekdayActivity } from "../../lib/weekday";
 
-export default function DashboardShell({
-  initialChainState,
-}: {
-  initialChainState?: ChainState;
-}) {
-  return (
-    <DashboardProvider initialChainState={initialChainState}>
-      <ShellContent />
-    </DashboardProvider>
-  );
-}
-
-function ShellContent() {
+export default function DashboardShell() {
   const {
     agents,
     signals,
@@ -76,7 +60,7 @@ function ShellContent() {
   const nowMs = useNowMs();
 
   return (
-    <DashboardLayout>
+    <>
       <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
         {walletError && <ErrorBanner message={walletError} onDismiss={clearError} />}
 
@@ -206,9 +190,7 @@ function ShellContent() {
           }
         />
       </div>
-      <ProposalModal />
-      <SignalDetailDrawer />
-    </DashboardLayout>
+    </>
   );
 }
 

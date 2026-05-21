@@ -1,7 +1,8 @@
 "use client";
 
-import { Bell, LogOut, Menu, Search, Wallet } from "lucide-react";
+import { LogOut, Menu, Search, Wallet } from "lucide-react";
 import { useDashboard } from "./DashboardProvider";
+import NotificationsDropdown from "./NotificationsDropdown";
 import ThemeToggle from "./ThemeToggle";
 
 function shortAddr(addr?: string): string {
@@ -41,14 +42,7 @@ export default function Topbar() {
       <div className="flex items-center gap-2">
         <ThemeToggle />
 
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="relative flex size-9 items-center justify-center rounded-lg border border-line bg-panel text-muted hover:text-text"
-        >
-          <Bell className="size-[18px]" strokeWidth={1.75} />
-          <span className="absolute right-2 top-2 size-1.5 rounded-full bg-accent" />
-        </button>
+        <NotificationsDropdown />
 
         {connected ? (
           <div className="flex items-center gap-1">

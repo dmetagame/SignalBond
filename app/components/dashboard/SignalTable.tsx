@@ -47,6 +47,7 @@ export default function SignalTable({
   onResolve,
   resolving = false,
   settlementLocked,
+  settlementCountdown,
 }: {
   signals: Signal[];
   agents: Agent[];
@@ -54,6 +55,7 @@ export default function SignalTable({
   onResolve?: (signal: Signal) => void | Promise<void>;
   resolving?: boolean;
   settlementLocked?: (signal: Signal) => boolean;
+  settlementCountdown?: (signal: Signal) => string;
 }) {
   const agentMap = new Map(agents.map((a) => [a.id, a]));
 
@@ -104,6 +106,7 @@ export default function SignalTable({
               const agent = agentMap.get(signal.agentId);
               const status = deriveStatus(signal);
               const locked = settlementLocked?.(signal) ?? false;
+              const countdown = settlementCountdown?.(signal);
               return (
                 <tr
                   key={signal.id}
@@ -176,7 +179,7 @@ export default function SignalTable({
                           className="inline-flex items-center gap-1 rounded-md border border-line-soft bg-panel-muted px-2 py-1 text-[11px] font-semibold text-muted hover:border-line hover:text-text disabled:opacity-50"
                         >
                           <Gavel className="size-3" strokeWidth={2} />
-                          {locked ? "Locked" : "Resolve"}
+                          {locked && countdown ? countdown : locked ? "Locked" : "Resolve"}
                         </button>
                       ) : (
                         <span className="text-[11px] text-faint">—</span>

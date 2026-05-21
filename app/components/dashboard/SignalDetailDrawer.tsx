@@ -13,7 +13,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { demoUsdcAddress, signalBondAddress } from "../../lib/contract";
 import { shortHash } from "../../lib/dashboard-actions";
 import { arcAddressUrl, arcTxUrl } from "../../lib/explorer";
@@ -30,6 +30,7 @@ export default function SignalDetailDrawer() {
     busy,
     isOnchainData,
   } = useDashboard();
+  const nowMs = useNowMs(Boolean(selectedSignal));
 
   useEffect(() => {
     if (!selectedSignal) return;
@@ -48,8 +49,9 @@ export default function SignalDetailDrawer() {
   const settlementLocked =
     isOnchainData &&
     selectedSignal.status === "active" &&
-    new Date(selectedSignal.expiresAt).getTime() > Date.now();
+    new Date(selectedSignal.expiresAt).getTime() > nowMs;
   const canResolve = selectedSignal.status === "active" && !busy.onchain && !settlementLocked;
+  const unlockMs = new Date(selectedSignal.expiresAt).getTime() - nowMs;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal>
@@ -160,9 +162,17 @@ export default function SignalDetailDrawer() {
 
         <footer className="border-t border-line-soft px-6 py-4">
           {settlementLocked ? (
-            <p className="text-xs text-muted">
-              Settlement unlocks after {new Date(selectedSignal.expiresAt).toLocaleString()}.
-            </p>
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-line-soft bg-panel-muted px-3 py-2.5">
+              <div>
+                <div className="text-xs font-semibold text-text">Settlement countdown</div>
+                <p className="mt-0.5 text-xs text-muted">
+                  Unlocks after {new Date(selectedSignal.expiresAt).toLocaleString()}.
+                </p>
+              </div>
+              <span className="font-mono text-sm font-semibold text-accent">
+                {formatCountdown(unlockMs)}
+              </span>
+            </div>
           ) : selectedSignal.status === "active" ? (
             <button
               type="button"
@@ -180,6 +190,27 @@ export default function SignalDetailDrawer() {
       </aside>
     </div>
   );
+}
+
+function useNowMs(active: boolean): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active]);
+
+  return nowMs;
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "Ready";
+
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function StatusBadge({ signal }: { signal: Signal }) {

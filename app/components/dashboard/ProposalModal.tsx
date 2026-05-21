@@ -22,6 +22,7 @@ const stageLabel: Record<PublishStage, string> = {
 export default function ProposalModal() {
   const {
     agentProposal,
+    agentProposalMode,
     agents,
     publishStage,
     busy,
@@ -45,6 +46,7 @@ export default function ProposalModal() {
   const publishing = busy.onchain || publishStage !== "idle";
   const label = stageLabel[publishStage] ?? "Publish to Arc";
   const needsWallet = !walletAddress;
+  const quickDemo = agentProposalMode === "quick-demo";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal>
@@ -71,7 +73,8 @@ export default function ProposalModal() {
             <div>
               <h2 className="text-base font-semibold text-text">Agent Proposal</h2>
               <p className="text-xs text-muted">
-                Generated {new Date(agentProposal.generatedAt).toLocaleString()}
+                {quickDemo ? "Quick lifecycle demo" : "Generated"}{" "}
+                {new Date(agentProposal.generatedAt).toLocaleString()}
               </p>
             </div>
           </div>
@@ -125,6 +128,12 @@ export default function ProposalModal() {
               expires {new Date(agentProposal.expiresAt).toLocaleString()}
             </span>
           </div>
+
+          {quickDemo && (
+            <div className="rounded-xl border border-accent/30 bg-accent-soft px-3 py-2 text-xs leading-relaxed text-text">
+              This demo signal expires quickly so settlement can be shown during a judge walkthrough.
+            </div>
+          )}
 
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wider text-faint">

@@ -1,6 +1,7 @@
 "use client";
 
-import { Activity, AlertTriangle, BadgeCheck, CalendarRange, CircleDollarSign, Play, Plus, RefreshCw, Trophy, X } from "lucide-react";
+import { Activity, AlertTriangle, BadgeCheck, CalendarRange, CircleDollarSign, Play, RefreshCw, TimerReset, Trophy, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import AgentAssistant from "./AgentAssistant";
 import DashboardLayout from "./DashboardLayout";
 import DashboardProvider, { useDashboard } from "./DashboardProvider";
@@ -41,6 +42,7 @@ function ShellContent() {
     syncState,
     busy,
     runAgentCycle,
+    runQuickLifecycleDemo,
     resolveSignal,
     selectSignal,
     refreshChainState,
@@ -71,6 +73,7 @@ function ShellContent() {
     : busy.onchain
       ? "Publishing…"
       : "Run Agent Cycle";
+  const nowMs = useNowMs();
 
   return (
     <DashboardLayout>
@@ -105,10 +108,19 @@ function ShellContent() {
                 type="button"
                 onClick={runAgentCycle}
                 disabled={cyclePending}
-                className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-semibold text-muted hover:text-text disabled:opacity-60"
               >
                 <Play className="size-4" strokeWidth={2} />
                 {cycleLabel}
+              </button>
+              <button
+                type="button"
+                onClick={runQuickLifecycleDemo}
+                disabled={cyclePending}
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
+              >
+                <TimerReset className="size-4" strokeWidth={2} />
+                {busy.scan ? "Preparing…" : "Quick Demo"}
               </button>
             </>
           }
@@ -187,7 +199,10 @@ function ShellContent() {
           settlementLocked={(signal) =>
             isOnchainData &&
             signal.status === "active" &&
-            new Date(signal.expiresAt).getTime() > Date.now()
+            new Date(signal.expiresAt).getTime() > nowMs
+          }
+          settlementCountdown={(signal) =>
+            formatCountdown(new Date(signal.expiresAt).getTime() - nowMs)
           }
         />
       </div>
@@ -195,6 +210,26 @@ function ShellContent() {
       <SignalDetailDrawer />
     </DashboardLayout>
   );
+}
+
+function useNowMs(): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return nowMs;
+}
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "Ready";
+
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function ErrorBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {

@@ -33,6 +33,9 @@ import type { ChainState } from "../../lib/chain-state";
 import type { Agent, Signal } from "../../lib/types";
 
 export type PublishStage = "idle" | "approving" | "publishing" | "confirming";
+export type ProposalMode = "standard" | "quick-demo";
+
+const QUICK_LIFECYCLE_SECONDS = 180;
 
 export type PublishSuccess = {
   agentName: string;
@@ -75,6 +78,7 @@ export type DashboardContextValue = {
   resolverAddress?: Address;
   ownerAddress?: Address;
   agentProposal?: AgentScan;
+  agentProposalMode?: ProposalMode;
   selectedSignal?: Signal;
   publishStage: PublishStage;
   publishSuccess?: PublishSuccess;
@@ -88,6 +92,7 @@ export type DashboardContextValue = {
   disconnectWallet: () => Promise<void>;
   claimDemoUsdc: () => Promise<void>;
   runAgentCycle: () => Promise<void>;
+  runQuickLifecycleDemo: () => Promise<void>;
   publishProposal: () => Promise<void>;
   dismissProposal: () => void;
   selectSignal: (signal: Signal) => void;
@@ -151,6 +156,7 @@ export default function DashboardProvider({
   const [claimBusy, setClaimBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [agentProposal, setAgentProposal] = useState<AgentScan>();
+  const [agentProposalMode, setAgentProposalMode] = useState<ProposalMode>();
   const [publishStage, setPublishStage] = useState<PublishStage>("idle");
   const [publishSuccess, setPublishSuccess] = useState<PublishSuccess>();
   const [settlementSuccess, setSettlementSuccess] = useState<SettlementSuccess>();
@@ -227,6 +233,7 @@ export default function DashboardProvider({
         setPublishSuccess(undefined);
         setSettlementSuccess(undefined);
         setSelectedSignalId(undefined);
+        setAgentProposalMode(undefined);
         void refreshOnchainState(null);
         return;
       }
@@ -286,6 +293,7 @@ export default function DashboardProvider({
     setPublishSuccess(undefined);
     setSettlementSuccess(undefined);
     setSelectedSignalId(undefined);
+    setAgentProposalMode(undefined);
 
     try {
       await window.ethereum?.request({
@@ -341,6 +349,26 @@ export default function DashboardProvider({
     try {
       const scan = await fetchAgentScan(scenarioIndex);
       setAgentProposal(scan);
+      setAgentProposalMode("standard");
+      setScenarioIndex((value) => value + 1);
+    } catch (error) {
+      setWalletError(normalizeError(error));
+    } finally {
+      setScanBusy(false);
+    }
+  }, [scenarioIndex]);
+
+  const runQuickLifecycleDemo = useCallback(async () => {
+    setScanBusy(true);
+    setWalletError(undefined);
+    setPublishSuccess(undefined);
+    setSettlementSuccess(undefined);
+    try {
+      const scan = await fetchAgentScan(scenarioIndex, {
+        expiresInSeconds: QUICK_LIFECYCLE_SECONDS,
+      });
+      setAgentProposal(scan);
+      setAgentProposalMode("quick-demo");
       setScenarioIndex((value) => value + 1);
     } catch (error) {
       setWalletError(normalizeError(error));
@@ -352,6 +380,7 @@ export default function DashboardProvider({
   const publishProposal = useCallback(async () => {
     if (!agentProposal) return;
     const proposalSignal = scanToSignal(agentProposal, `proposal-${agentProposal.sourceHash}`);
+    const publishingQuickDemo = agentProposalMode === "quick-demo";
 
     if (contractsConfigured) {
       if (!walletAddress) {
@@ -397,7 +426,11 @@ export default function DashboardProvider({
               ? 0
               : Math.max(0, scoreAfter - scoreBefore),
         });
+        if (publishingQuickDemo && publishedSignal) {
+          setSelectedSignalId(publishedSignal.id);
+        }
         setAgentProposal(undefined);
+        setAgentProposalMode(undefined);
       } catch (error) {
         setWalletError(normalizeError(error));
       } finally {
@@ -409,11 +442,13 @@ export default function DashboardProvider({
 
     setSignals((current) => [proposalSignal, ...current]);
     setAgentProposal(undefined);
-  }, [agentProposal, agents, walletAddress, refreshOnchainState]);
+    setAgentProposalMode(undefined);
+  }, [agentProposal, agentProposalMode, agents, walletAddress, refreshOnchainState]);
 
   const dismissProposal = useCallback(() => {
     if (publishStage !== "idle") return;
     setAgentProposal(undefined);
+    setAgentProposalMode(undefined);
   }, [publishStage]);
 
   const resolveSignal = useCallback(
@@ -580,6 +615,7 @@ export default function DashboardProvider({
       resolverAddress,
       ownerAddress,
       agentProposal,
+      agentProposalMode,
       selectedSignal,
       publishStage,
       publishSuccess,
@@ -589,6 +625,7 @@ export default function DashboardProvider({
       disconnectWallet,
       claimDemoUsdc,
       runAgentCycle,
+      runQuickLifecycleDemo,
       publishProposal,
       dismissProposal,
       selectSignal,
@@ -614,6 +651,7 @@ export default function DashboardProvider({
       resolverAddress,
       ownerAddress,
       agentProposal,
+      agentProposalMode,
       selectedSignal,
       publishStage,
       publishSuccess,
@@ -625,6 +663,7 @@ export default function DashboardProvider({
       disconnectWallet,
       claimDemoUsdc,
       runAgentCycle,
+      runQuickLifecycleDemo,
       publishProposal,
       dismissProposal,
       selectSignal,

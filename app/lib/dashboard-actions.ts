@@ -325,9 +325,18 @@ function pseudoHash(input: string): `0x${string}` {
   return `0x${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}`;
 }
 
-export async function fetchAgentScan(sequence: number): Promise<AgentScan> {
+export async function fetchAgentScan(
+  sequence: number,
+  options: { expiresInSeconds?: number } = {},
+): Promise<AgentScan> {
   try {
-    const response = await fetch(`/api/agent-scan?sequence=${sequence}`, {
+    const url = new URL("/api/agent-scan", window.location.origin);
+    url.searchParams.set("sequence", String(sequence));
+    if (options.expiresInSeconds !== undefined) {
+      url.searchParams.set("expiresInSeconds", String(options.expiresInSeconds));
+    }
+
+    const response = await fetch(url, {
       cache: "no-store",
     });
     if (!response.ok) {
@@ -337,7 +346,7 @@ export async function fetchAgentScan(sequence: number): Promise<AgentScan> {
     const payload = (await response.json()) as { signal: AgentScan };
     return payload.signal;
   } catch {
-    return generateAgentScan({ sequence });
+    return generateAgentScan({ sequence, expiresInSeconds: options.expiresInSeconds });
   }
 }
 

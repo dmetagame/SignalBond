@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeftRight, Bell, CheckCircle2, Inbox, XCircle } from "lucide-react";
+import { ArrowLeftRight, Bell, CheckCircle2, ExternalLink, Inbox, XCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./DashboardProvider";
 import { shortHash } from "../../lib/dashboard-actions";
+import { arcTxUrl } from "../../lib/explorer";
 import { formatBps } from "../../lib/reputation";
 
 type Notification = {
@@ -12,6 +13,7 @@ type Notification = {
   subtitle: string;
   timestamp?: string;
   variant: "won" | "lost" | "tx";
+  href?: string;
 };
 
 function timeAgo(iso: string, nowMs: number): string {
@@ -80,6 +82,7 @@ export default function NotificationsDropdown() {
       title: "Onchain transaction submitted",
       subtitle: shortHash(lastOnchainTx),
       variant: "tx",
+      href: arcTxUrl(lastOnchainTx),
     });
   }
 
@@ -124,35 +127,59 @@ export default function NotificationsDropdown() {
             </div>
           ) : (
             <ul className="max-h-96 divide-y divide-line-soft overflow-y-auto">
-              {notifications.map((n) => (
-                <li key={n.id} className="flex items-start gap-3 px-4 py-3 hover:bg-panel-muted/40">
-                  <span
-                    className={[
-                      "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
-                      n.variant === "won"
-                        ? "bg-success-soft text-success"
-                        : n.variant === "lost"
-                          ? "bg-danger-soft text-danger"
-                          : "bg-accent-soft text-accent",
-                    ].join(" ")}
-                  >
-                    {n.variant === "won" ? (
-                      <CheckCircle2 className="size-4" strokeWidth={2} />
-                    ) : n.variant === "lost" ? (
-                      <XCircle className="size-4" strokeWidth={2} />
-                    ) : (
-                      <ArrowLeftRight className="size-4" strokeWidth={2} />
+              {notifications.map((n) => {
+                const body = (
+                  <>
+                    <span
+                      className={[
+                        "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg",
+                        n.variant === "won"
+                          ? "bg-success-soft text-success"
+                          : n.variant === "lost"
+                            ? "bg-danger-soft text-danger"
+                            : "bg-accent-soft text-accent",
+                      ].join(" ")}
+                    >
+                      {n.variant === "won" ? (
+                        <CheckCircle2 className="size-4" strokeWidth={2} />
+                      ) : n.variant === "lost" ? (
+                        <XCircle className="size-4" strokeWidth={2} />
+                      ) : (
+                        <ArrowLeftRight className="size-4" strokeWidth={2} />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-text">{n.title}</div>
+                      <div className="flex items-center gap-1 truncate text-xs text-muted">
+                        {n.subtitle}
+                        {n.href && <ExternalLink className="size-3 text-faint" strokeWidth={1.75} />}
+                      </div>
+                    </div>
+                    {n.timestamp && (
+                      <span className="shrink-0 text-[11px] text-faint">{n.timestamp}</span>
                     )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-text">{n.title}</div>
-                    <div className="truncate text-xs text-muted">{n.subtitle}</div>
-                  </div>
-                  {n.timestamp && (
-                    <span className="shrink-0 text-[11px] text-faint">{n.timestamp}</span>
-                  )}
-                </li>
-              ))}
+                  </>
+                );
+
+                return (
+                  <li key={n.id}>
+                    {n.href ? (
+                      <a
+                        href={n.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-panel-muted/40"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <div className="flex items-start gap-3 px-4 py-3 hover:bg-panel-muted/40">
+                        {body}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -2,6 +2,7 @@
 
 import { LogOut, Menu, Search, Wallet } from "lucide-react";
 import { useDashboard } from "./DashboardProvider";
+import { useMobileNav } from "./DashboardLayout";
 import NotificationsDropdown from "./NotificationsDropdown";
 import ThemeToggle from "./ThemeToggle";
 
@@ -12,12 +13,14 @@ function shortAddr(addr?: string): string {
 
 export default function Topbar() {
   const { walletAddress, walletOnArc, connectWallet, disconnectWallet } = useDashboard();
+  const { setOpen: setMobileNavOpen } = useMobileNav();
   const connected = Boolean(walletAddress);
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-bg/80 px-4 backdrop-blur md:px-6">
       <button
         type="button"
+        onClick={() => setMobileNavOpen(true)}
         aria-label="Open menu"
         className="flex size-9 items-center justify-center rounded-lg border border-line bg-panel text-muted md:hidden"
       >

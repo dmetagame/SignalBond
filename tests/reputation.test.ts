@@ -4,11 +4,15 @@ import { agents } from "../app/lib/seed";
 import { calculateScore, settleAgent } from "../app/lib/reputation";
 
 describe("reputation scoring", () => {
-  it("ranks agents into a bounded score", () => {
+  it("matches the onchain reputation formula", () => {
     const score = calculateScore(agents[0]);
+    const agent = agents[0];
+    const expectedRaw =
+      Math.floor((agent.correctSignals * 10_000) / agent.resolvedSignals) +
+      Math.trunc(agent.cumulativePnlBps / 4);
+    const expected = Math.max(0, expectedRaw / 100);
 
-    assert.ok(score.reputation > 0);
-    assert.ok(score.reputation <= 100);
+    assert.equal(score.reputation, expected);
     assert.ok(score.winRate > 0);
   });
 

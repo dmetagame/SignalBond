@@ -17,11 +17,13 @@ import {
   HelpCircle,
   Wallet,
   Coins,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useDashboard } from "./DashboardProvider";
+import { useMobileNav } from "./DashboardLayout";
 import SignalBondMark from "./SignalBondMark";
 
 type NavItem = {
@@ -124,6 +126,7 @@ function NavSection({ items, pathname }: { items: NavItem[]; pathname: string })
 export default function Sidebar() {
   const pathname = usePathname() ?? "/";
   const [onchainOpen, setOnchainOpen] = useState(true);
+  const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
   const {
     signals,
     walletAddress,
@@ -141,16 +144,39 @@ export default function Sidebar() {
   const claimLabel = demoUsdcClaimed ? "Claimed" : busy.claim ? "Claiming..." : "Claim";
 
   return (
-    <aside className="hidden md:flex md:w-64 lg:w-72 shrink-0 flex-col gap-6 border-r border-line bg-panel px-4 py-6">
-      <div className="flex items-center gap-3 px-2">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-accent overflow-hidden">
-          <SignalBondMark size={36} />
+    <>
+      {mobileOpen && (
+        <div
+          aria-hidden
+          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden"
+        />
+      )}
+      <aside
+        className={[
+          "z-40 flex w-72 shrink-0 flex-col gap-6 border-r border-line bg-panel px-4 py-6",
+          "fixed inset-y-0 left-0 transition-transform duration-200 ease-out md:static md:translate-x-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          "md:flex md:w-64 lg:w-72",
+        ].join(" ")}
+      >
+        <div className="flex items-center gap-3 px-2">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-accent overflow-hidden">
+            <SignalBondMark size={36} />
+          </div>
+          <div className="flex flex-1 flex-col">
+            <span className="text-[15px] font-semibold tracking-tight">SignalBond</span>
+            <span className="text-[11px] uppercase tracking-wider text-faint">Arc reputation</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="flex size-8 items-center justify-center rounded-lg text-muted hover:bg-panel-muted hover:text-text md:hidden"
+          >
+            <X className="size-4" strokeWidth={1.75} />
+          </button>
         </div>
-        <div className="flex flex-col">
-          <span className="text-[15px] font-semibold tracking-tight">SignalBond</span>
-          <span className="text-[11px] uppercase tracking-wider text-faint">Arc reputation</span>
-        </div>
-      </div>
 
       <nav className="flex flex-1 flex-col gap-6 overflow-y-auto">
         <NavSection items={primaryNav} pathname={pathname} />
@@ -206,5 +232,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowLeftRight, ExternalLink } from "lucide-react";
+import { ArrowLeftRight, Copy, ExternalLink } from "lucide-react";
 import { useDashboard } from "../../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../../components/dashboard/SectionHeader";
 import { shortHash } from "../../../lib/dashboard-actions";
+import { arcTxUrl } from "../../../lib/explorer";
 
 export default function TransactionsPage() {
   const { lastOnchainTx, publishStage, busy } = useDashboard();
@@ -47,13 +48,22 @@ export default function TransactionsPage() {
               <div className="text-sm font-medium text-text">Last transaction</div>
               <code className="font-mono text-xs text-muted">{shortHash(lastOnchainTx)}</code>
             </div>
-            <button
-              type="button"
-              onClick={() => navigator.clipboard?.writeText(lastOnchainTx)}
+            <a
+              href={arcTxUrl(lastOnchainTx)}
+              target="_blank"
+              rel="noreferrer"
               className="inline-flex items-center gap-1 rounded-md border border-line bg-panel px-2 py-1 text-xs text-muted hover:text-text"
             >
               <ExternalLink className="size-3" strokeWidth={2} />
-              Copy
+              View on Arcscan
+            </a>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(lastOnchainTx)}
+              aria-label="Copy tx hash"
+              className="inline-flex size-7 items-center justify-center rounded-md text-faint hover:bg-panel-muted hover:text-text"
+            >
+              <Copy className="size-3.5" strokeWidth={1.75} />
             </button>
           </div>
         )}

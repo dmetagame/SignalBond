@@ -4,6 +4,7 @@ import { ExternalLink, Gavel, ShieldCheck } from "lucide-react";
 import { useDashboard } from "../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../components/dashboard/SectionHeader";
 import { shortHash } from "../../lib/dashboard-actions";
+import { arcAddressUrl, arcTxUrl } from "../../lib/explorer";
 import { formatBps, formatUsdc } from "../../lib/reputation";
 
 export default function SettlementPage() {
@@ -40,18 +41,21 @@ export default function SettlementPage() {
           icon={<ShieldCheck className="size-4" strokeWidth={1.75} />}
           label="Resolver"
           value={resolverAddress ? shortHash(resolverAddress) : "—"}
+          href={resolverAddress ? arcAddressUrl(resolverAddress) : undefined}
           mono
         />
         <InfoCard
           icon={<ShieldCheck className="size-4" strokeWidth={1.75} />}
           label="Owner"
           value={ownerAddress ? shortHash(ownerAddress) : "—"}
+          href={ownerAddress ? arcAddressUrl(ownerAddress) : undefined}
           mono
         />
         <InfoCard
           icon={<ExternalLink className="size-4" strokeWidth={1.75} />}
           label="Last tx"
           value={lastOnchainTx ? shortHash(lastOnchainTx) : "None this session"}
+          href={lastOnchainTx ? arcTxUrl(lastOnchainTx) : undefined}
           mono
         />
       </div>
@@ -110,14 +114,17 @@ function InfoCard({
   label,
   value,
   hint,
+  href,
   mono = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   hint?: string;
+  href?: string;
   mono?: boolean;
 }) {
+  const valueClass = `text-lg font-semibold text-text ${mono ? "font-mono tabular-nums" : ""}`;
   return (
     <div className="flex flex-col gap-2 rounded-2xl border border-line bg-panel p-5 shadow-card">
       <div className="flex items-center justify-between">
@@ -128,11 +135,19 @@ function InfoCard({
           {icon}
         </span>
       </div>
-      <span
-        className={`text-lg font-semibold text-text ${mono ? "font-mono tabular-nums" : ""}`}
-      >
-        {value}
-      </span>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className={`${valueClass} inline-flex items-center gap-1 hover:text-accent`}
+        >
+          {value}
+          <ExternalLink className="size-3.5" strokeWidth={1.75} />
+        </a>
+      ) : (
+        <span className={valueClass}>{value}</span>
+      )}
       {hint && <span className="text-xs text-muted">{hint}</span>}
     </div>
   );

@@ -1,9 +1,11 @@
 "use client";
 
-import { Copy, FileCode2 } from "lucide-react";
+import { Copy, ExternalLink, FileCode2 } from "lucide-react";
+import type { Address } from "viem";
 import { useDashboard } from "../../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../../components/dashboard/SectionHeader";
 import { demoUsdcAddress, signalBondAddress } from "../../../lib/contract";
+import { arcAddressUrl } from "../../../lib/explorer";
 
 export default function ContractsPage() {
   const { resolverAddress, ownerAddress, contractSignalCount } = useDashboard();
@@ -55,6 +57,17 @@ function AddressRow({ label, value }: { label: string; value?: string }) {
         <code className="rounded-md bg-panel-muted px-2 py-1 font-mono text-xs text-text">
           {value ?? "not configured"}
         </code>
+        {value && (
+          <a
+            href={arcAddressUrl(value as Address)}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`View ${label} on Arcscan`}
+            className="flex size-7 items-center justify-center rounded-md text-faint hover:bg-panel-muted hover:text-text"
+          >
+            <ExternalLink className="size-3.5" strokeWidth={1.75} />
+          </a>
+        )}
         {value && (
           <button
             type="button"

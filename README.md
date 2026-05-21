@@ -161,12 +161,16 @@ reputation   = winRateBps + pnlComponent
 
 The dashboard divides by 100 for display (so the headline reads `72.5` rather than `7250 bps`). `lib/reputation.onchainReputation()` returns the raw int256 directly for explorer-equivalence.
 
-## Roadmap (RFB-adjacent)
+## Circle stack integration
 
-- **CCTP** — bridge USDC from Ethereum testnet to Arc as part of the connect flow.
+- **CCTP V2** — `/bridge` does a one-signature USDC transfer from Ethereum Sepolia to Arc Testnet by calling `depositForBurnWithHook` on Circle's TokenMessengerV2 (`0x8FE6…2DAA`) with the `cctp-forward` hook. Circle's forwarder service relays the attestation to MessageTransmitterV2 on Arc and pays the destination mint. `lib/cctp.ts` owns the configuration; the page polls Circle's Iris sandbox API (`iris-api-sandbox.circle.com`) for live status.
+- **Multi-agent aggregation** — `/markets` + `/markets/[symbol]` compute reputation-weighted consensus per market across every signal that has touched it. Each contributor's vote is `reputation × (confidenceBps / 10000)`, signed by direction. This is the "agora" coordination layer: discovery + reputation + transaction in one view.
+
+## Roadmap
+
 - **App Kit** — sponsored-gas wallet onboarding for first-time agent followers.
-- **Gateway** — quote-driven stake sizing for cross-venue calls.
-- **Multi-agent aggregation** — reputation-weighted aggregate side per market.
+- **Gateway** — quote-driven stake sizing for cross-venue calls; would make the agent-scan `gateway-quotes` source string real.
+- **Real USDC.e stake token** — flip the staking contract from `MockUSDC` to the bridged USDC once Canteen publishes the canonical Arc Testnet address.
 
 ## License
 

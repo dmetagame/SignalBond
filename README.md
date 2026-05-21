@@ -20,13 +20,13 @@ AI agents are becoming economic actors, but the rails for accountability don't e
 - **Discovery** — Agent Book + ranked Agents page; signals are filterable by status and market.
 - **Transaction** — Real `createSignal` + `resolveSignal` on Arc, USDC-staked. ~$0.01 fees, sub-second finality.
 - **Reputation** — `getScore(agentId)` returns the canonical reputation. The dashboard's offchain `calculateScore` mirrors the contract formula exactly (`winRateBps + cumPnL/4`) so the UI never drifts from chain state.
-- **AI agents** — `proposeSignal` is implemented as a Claude Haiku tool call on the server (`/api/agent-scan`) with cached system + agent-roster blocks. Falls back to deterministic templates if `ANTHROPIC_API_KEY` is unset.
+- **AI agents** — `proposeSignal` is implemented as an LLM tool call on the server (`/api/agent-scan`). Default provider is **Groq + Llama 3.3 70B** (free tier, sub-second), with **Claude Haiku 4.5** as an alternative when `ANTHROPIC_API_KEY` is set. Falls back to deterministic templates if neither is configured. The response includes an `agentRuntime` field so judges can verify which path served the proposal.
 
 ## Tech stack
 
 - **Frontend** — Next.js 16 (App Router, route groups), React 19, Tailwind v4 (CSS-variable tokens), Recharts, Lucide icons.
 - **Onchain** — Solidity 0.8.30 (`SignalBond.sol`, `MockUSDC.sol`), viem 2.x for RPC and wallet flows.
-- **Agent runtime** — Anthropic SDK (`@anthropic-ai/sdk`) with tool-use for structured proposals, prompt caching on the static system blocks.
+- **Agent runtime** — Groq SDK (`groq-sdk`, default) or Anthropic SDK (`@anthropic-ai/sdk`) with tool-use for structured proposals; Anthropic uses prompt caching on the static system blocks.
 - **RPC** — Canteen Arc node (server-side, keyed) with public Arc fallback for browser writes.
 
 ## Run locally
@@ -47,12 +47,16 @@ npm run compile:contracts
 
 | Variable | Where | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Server only | Enables real Claude Haiku agent proposals. Without it, `/api/agent-scan` falls back to deterministic templates. |
+| `GROQ_API_KEY` | Server only | **Recommended free path.** Enables Groq + Llama 3.3 70B Versatile agent proposals. Get a key at https://console.groq.com. |
+| `ANTHROPIC_API_KEY` | Server only | Alternative paid path. Enables Claude Haiku 4.5 proposals. Used only if `GROQ_API_KEY` is unset (or via `?provider=anthropic`). |
+| `GROQ_MODEL` | Server only | Optional. Defaults to `llama-3.3-70b-versatile`. |
 | `ARC_RPC_URL` | Server only | Canteen Arc RPC (keyed). Do **not** expose via `NEXT_PUBLIC_*`. |
 | `NEXT_PUBLIC_ARC_CHAIN_ID` | Browser | Defaults to `5042002`. |
 | `NEXT_PUBLIC_SIGNALBOND_ADDRESS` | Browser | Deployed `SignalBond` address. |
 | `NEXT_PUBLIC_DEMO_USDC_ADDRESS` | Browser | Deployed `MockUSDC` address. |
 | `NEXT_PUBLIC_ARC_EXPLORER` | Browser | Optional. Defaults to `https://testnet.arcscan.app`. |
+
+Without any LLM key set, `/api/agent-scan` still works — it serves deterministic templates so the UI stays demoable. Production responses include an `agentRuntime` field (`groq:llama-3.3-70b-versatile` / `claude-haiku-4-5` / `deterministic-scan-v1`) so judges can verify which path is live.
 
 ## Arc deployment
 
@@ -118,6 +122,7 @@ app/
   lib/
     agent-scan.ts             Deterministic template generator (fallback)
     agent-scan-llm.ts         Claude Haiku tool-use proposer with prompt caching
+    agent-scan-groq.ts        Groq + Llama 3.3 70B tool-use proposer (default)
     dashboard-actions.ts      viem-based contract calls (publish/resolve/claim/ensureArc)
     chain-state.ts            Server-side initial dashboard read
     onchain.ts                Public client + waitForOnchainTx + agentHash

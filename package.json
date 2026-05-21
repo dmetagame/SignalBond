@@ -16,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
     "@tailwindcss/postcss": "^4.3.0",
+    "groq-sdk": "^1.2.0",
     "lucide-react": "^0.468.0",
     "next": "^16.2.3",
     "react": "^19.2.5",

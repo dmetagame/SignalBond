@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Wallet,
   Coins,
+  Waypoints,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -44,6 +45,7 @@ function buildPrimaryNav(activeSignalCount: number): NavItem[] {
     },
     { label: "Agents", icon: Users, href: "/agents" },
     { label: "Markets", icon: LineChart, href: "/markets" },
+    { label: "Bridge", icon: Waypoints, href: "/bridge" },
     { label: "Settlement", icon: Scale, href: "/settlement" },
   ];
 }

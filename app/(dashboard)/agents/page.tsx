@@ -2,6 +2,7 @@
 
 import { Trophy } from "lucide-react";
 import { useDashboard } from "../../components/dashboard/DashboardProvider";
+import FollowButton from "../../components/dashboard/FollowButton";
 import SectionHeader from "../../components/dashboard/SectionHeader";
 import { calculateScore, formatUsdc } from "../../lib/reputation";
 
@@ -49,11 +50,14 @@ export default function AgentsPage() {
                   </div>
                   <div className="truncate text-xs text-muted">{agent.desk}</div>
                 </div>
-                <div className="text-right">
-                  <div className="text-2xl font-semibold text-text tabular-nums">
-                    {score.reputation.toFixed(1)}
+                <div className="flex items-start gap-2">
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold text-text tabular-nums">
+                      {score.reputation.toFixed(1)}
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-faint">rep</div>
                   </div>
-                  <div className="text-[10px] uppercase tracking-wider text-faint">rep</div>
+                  <FollowButton agent={agent} size="sm" />
                 </div>
               </header>
 

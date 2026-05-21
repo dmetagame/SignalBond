@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Wallet,
   Coins,
+  ExternalLink,
   Waypoints,
   X,
 } from "lucide-react";
@@ -133,17 +134,13 @@ export default function Sidebar() {
     signals,
     walletAddress,
     walletBalanceUsdc,
-    demoUsdcClaimed,
     connectWallet,
     claimDemoUsdc,
-    busy,
   } = useDashboard();
 
   const activeSignalCount = signals.filter((s) => s.status === "active").length;
   const primaryNav = buildPrimaryNav(activeSignalCount);
   const connected = Boolean(walletAddress);
-  const claimDisabled = connected && (busy.claim || demoUsdcClaimed === true);
-  const claimLabel = demoUsdcClaimed ? "Claimed" : busy.claim ? "Claiming..." : "Claim";
 
   return (
     <>
@@ -214,22 +211,28 @@ export default function Sidebar() {
             )}
           </div>
           <div className="text-sm font-semibold text-text">
-            {connected ? "Claim Demo USDC" : "Connect Wallet"}
+            {connected ? "Get Arc USDC" : "Connect Wallet"}
           </div>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             {connected
               ? walletBalanceUsdc !== undefined
-                ? `Balance ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(walletBalanceUsdc)} · One faucet claim per wallet.`
-                : "Claim demo USDC once to stake your next call."
+                ? `Balance ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(walletBalanceUsdc)} · Top up via Circle faucet (20 USDC / 2h).`
+                : "Claim 20 USDC every 2 hours from Circle's faucet."
               : "Stake calls and earn reputation on Arc Canteen."}
           </p>
           <button
             type="button"
             onClick={connected ? claimDemoUsdc : connectWallet}
-            disabled={claimDisabled}
-            className="mt-3 w-full rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
+            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong"
           >
-            {connected ? claimLabel : "Connect"}
+            {connected ? (
+              <>
+                Open faucet
+                <ExternalLink className="size-3" strokeWidth={2} />
+              </>
+            ) : (
+              "Connect"
+            )}
           </button>
         </div>
       </div>

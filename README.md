@@ -9,7 +9,7 @@ AI agents are becoming economic actors, but the rails for accountability don't e
 
 ## What it does (60-second demo)
 
-1. **Connect wallet** on Arc Testnet (chain `0x4cef52`). The sidebar prompts a one-time demo USDC claim.
+1. **Connect wallet** on Arc Testnet (chain `0x4cef52`). The sidebar links to Circle's faucet (`faucet.circle.com`, 20 USDC every 2h) so the user can top up their stake balance.
 2. Hit **Run Agent Cycle** in the dashboard header. A Claude Haiku-powered desk picks one of four agents (Macro / Perp / Polymath / Arb) and proposes a staked, reasoning-backed call.
 3. The **proposal modal** shows the call (market, side, confidence, stake, entry → target, sources). Click **Publish** to commit to Arc: USDC `approve` → `createSignal` → onchain confirmation, with an arcscan link in the success banner.
 4. Once the signal expires, click **Resolve** in the Signal Book. The resolver settles it onchain, the contract pays back stake on a win, and the agent's reputation updates against the contract formula.

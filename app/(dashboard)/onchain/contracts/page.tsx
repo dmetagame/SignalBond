@@ -4,7 +4,7 @@ import { Copy, ExternalLink, FileCode2 } from "lucide-react";
 import type { Address } from "viem";
 import { useDashboard } from "../../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../../components/dashboard/SectionHeader";
-import { demoUsdcAddress, signalBondAddress } from "../../../lib/contract";
+import { signalBondAddress, usdcAddress } from "../../../lib/contract";
 import { arcAddressUrl } from "../../../lib/explorer";
 
 export default function ContractsPage() {
@@ -12,7 +12,7 @@ export default function ContractsPage() {
 
   const rows: { label: string; value?: string }[] = [
     { label: "SignalBond contract", value: signalBondAddress },
-    { label: "Demo USDC", value: demoUsdcAddress },
+    { label: "USDC (stake token)", value: usdcAddress },
     { label: "Resolver", value: resolverAddress },
     { label: "Owner", value: ownerAddress },
   ];

@@ -15,11 +15,9 @@ import {
 } from "../../lib/seed";
 import { calculateScore, settleAgent } from "../../lib/reputation";
 import {
-  claimDemoUsdcOnchain,
   ensureArcNetwork,
   fetchAgentScan,
   fetchChainState,
-  hasClaimedDemoUsdc,
   normalizeError,
   numberToHexChainId,
   publishSignalOnchain,
@@ -27,7 +25,6 @@ import {
   resolveSignalOnchain,
   sameChainId,
   scanToSignal,
-  withWalletTimeout,
 } from "../../lib/dashboard-actions";
 import type { ChainState } from "../../lib/chain-state";
 import type { Agent, Signal } from "../../lib/types";
@@ -69,7 +66,6 @@ export type DashboardContextValue = {
   walletAddress?: Address;
   walletError?: string;
   walletBalanceUsdc?: number;
-  demoUsdcClaimed?: boolean;
   walletOnArc: boolean;
   isOnchainData: boolean;
   syncState: "idle" | "syncing" | "synced" | "failed";
@@ -134,7 +130,6 @@ export default function DashboardProvider({
   const [walletBalanceUsdc, setWalletBalanceUsdc] = useState<number | undefined>(
     initialChainState?.walletBalanceUsdc,
   );
-  const [demoUsdcClaimed, setDemoUsdcClaimed] = useState<boolean | undefined>();
   const [resolverAddress, setResolverAddress] = useState<Address | undefined>(
     initialChainState?.resolver,
   );
@@ -190,12 +185,8 @@ export default function DashboardProvider({
 
       setSyncState("syncing");
       try {
-        const [dashboard, claimed] = await Promise.all([
-          fetchChainState(account ?? undefined),
-          account ? hasClaimedDemoUsdc(account).catch(() => undefined) : undefined,
-        ]);
+        const dashboard = await fetchChainState(account ?? undefined);
         applyChainState(dashboard);
-        setDemoUsdcClaimed(claimed);
         setDataSourceMode("onchain");
         setSyncState("synced");
         setWalletError(undefined);
@@ -227,7 +218,6 @@ export default function DashboardProvider({
       if (!nextAccount) {
         setWalletAddress(undefined);
         setWalletBalanceUsdc(undefined);
-        setDemoUsdcClaimed(undefined);
         setWalletChainId(undefined);
         setLastOnchainTx(undefined);
         setPublishSuccess(undefined);
@@ -287,7 +277,6 @@ export default function DashboardProvider({
     setWalletError(undefined);
     setWalletAddress(undefined);
     setWalletBalanceUsdc(undefined);
-    setDemoUsdcClaimed(undefined);
     setWalletChainId(undefined);
     setLastOnchainTx(undefined);
     setPublishSuccess(undefined);
@@ -307,39 +296,17 @@ export default function DashboardProvider({
     await refreshOnchainState(null);
   }, [refreshOnchainState]);
 
+  /**
+   * Real Arc Testnet USDC is dispensed via Circle's faucet (faucet.circle.com,
+   * 20 USDC per 2h per address). There's no onchain claim to call, so this
+   * just opens the faucet in a new tab — kept on the context for the sidebar
+   * "Get USDC" card and any future faucet-aware UX.
+   */
   const claimDemoUsdc = useCallback(async () => {
-    setWalletError(undefined);
-    if (!contractsConfigured) {
-      setWalletError("Demo contracts are not configured yet.");
-      return;
+    if (typeof window !== "undefined") {
+      window.open("https://faucet.circle.com", "_blank", "noopener,noreferrer");
     }
-    if (!walletAddress) {
-      setWalletError("Connect wallet before claiming demo USDC.");
-      return;
-    }
-    if (demoUsdcClaimed) {
-      setWalletError(
-        "Demo USDC was already claimed by this wallet. Use the existing balance or switch wallets.",
-      );
-      return;
-    }
-
-    setClaimBusy(true);
-    try {
-      const txHash = await withWalletTimeout(
-        claimDemoUsdcOnchain(walletAddress),
-        "Demo USDC claim",
-      );
-      setLastOnchainTx(txHash);
-      await waitForOnchainTx(txHash);
-      await refreshOnchainState(walletAddress);
-      setDemoUsdcClaimed(true);
-    } catch (error) {
-      setWalletError(normalizeError(error));
-    } finally {
-      setClaimBusy(false);
-    }
-  }, [walletAddress, refreshOnchainState]);
+  }, []);
 
   const runAgentCycle = useCallback(async () => {
     setScanBusy(true);
@@ -606,7 +573,6 @@ export default function DashboardProvider({
       walletAddress,
       walletError,
       walletBalanceUsdc,
-      demoUsdcClaimed,
       walletOnArc,
       isOnchainData,
       syncState,
@@ -642,7 +608,6 @@ export default function DashboardProvider({
       walletAddress,
       walletError,
       walletBalanceUsdc,
-      demoUsdcClaimed,
       walletOnArc,
       isOnchainData,
       syncState,

@@ -14,7 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { demoUsdcAddress, signalBondAddress } from "../../lib/contract";
+import { usdcAddress, signalBondAddress } from "../../lib/contract";
 import { shortHash } from "../../lib/dashboard-actions";
 import { arcAddressUrl, arcTxUrl } from "../../lib/explorer";
 import { calculateScore, formatBps, formatUsdc } from "../../lib/reputation";
@@ -119,11 +119,11 @@ export default function SignalDetailDrawer() {
                   href={arcAddressUrl(signalBondAddress)}
                 />
               )}
-              {demoUsdcAddress && (
+              {usdcAddress && (
                 <ProofLink
                   label="Stake token"
-                  value={shortHash(demoUsdcAddress)}
-                  href={arcAddressUrl(demoUsdcAddress)}
+                  value={shortHash(usdcAddress)}
+                  href={arcAddressUrl(usdcAddress)}
                 />
               )}
               {selectedSignal.publisher && (

@@ -22,8 +22,25 @@ export const arcCanteen = defineChain({
 });
 
 export const signalBondAddress = readAddress(process.env.NEXT_PUBLIC_SIGNALBOND_ADDRESS);
-export const demoUsdcAddress = readAddress(process.env.NEXT_PUBLIC_DEMO_USDC_ADDRESS);
-export const contractsConfigured = Boolean(signalBondAddress && demoUsdcAddress);
+
+/**
+ * USDC on Arc Testnet is the native gas asset and is exposed as an
+ * ERC20-compatible system contract at 0x3600…0000. We default to that so the
+ * stake token matches what users hold from the Circle faucet (and what CCTP
+ * mints on the destination side). `NEXT_PUBLIC_USDC_ADDRESS` and the legacy
+ * `NEXT_PUBLIC_DEMO_USDC_ADDRESS` are both honored for backward compatibility.
+ */
+const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000" as Address;
+export const usdcAddress: Address =
+  readAddress(process.env.NEXT_PUBLIC_USDC_ADDRESS) ??
+  readAddress(process.env.NEXT_PUBLIC_DEMO_USDC_ADDRESS) ??
+  ARC_TESTNET_USDC;
+
+/** Legacy alias retained so existing imports keep working during the swap. */
+export const demoUsdcAddress = usdcAddress;
+export const contractsConfigured = Boolean(signalBondAddress);
+
+export const faucetUrl = "https://faucet.circle.com";
 
 export const signalBondAbi = [
   {
@@ -126,13 +143,6 @@ export const signalBondAbi = [
 export const erc20Abi = [
   {
     type: "function",
-    name: "claim",
-    stateMutability: "nonpayable",
-    inputs: [],
-    outputs: [],
-  },
-  {
-    type: "function",
     name: "approve",
     stateMutability: "nonpayable",
     inputs: [
@@ -157,13 +167,6 @@ export const erc20Abi = [
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "hasClaimed",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "address" }],
-    outputs: [{ name: "", type: "bool" }],
   },
 ] as const;
 

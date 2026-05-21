@@ -87,7 +87,7 @@ export async function publishSignalOnchain(
   const walletPublicClient = getWalletPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
 
-  const existingAllowance = await readDemoUsdcAllowance(
+  const existingAllowance = await readUsdcAllowance(
     account,
     signalBondAddress,
     walletPublicClient,
@@ -163,58 +163,11 @@ export async function resolveSignalOnchain(
   });
 }
 
-export async function claimDemoUsdcOnchain(account: Address): Promise<Hex> {
-  if (!window.ethereum) {
-    throw new Error("No injected wallet found.");
-  }
-
-  if (!demoUsdcAddress) {
-    throw new Error("Demo USDC address is not configured.");
-  }
-
-  await ensureArcNetwork();
-
-  if (await hasClaimedDemoUsdc(account)) {
-    throw new Error(
-      "Demo USDC was already claimed by this wallet. Use the existing balance or switch wallets.",
-    );
-  }
-
-  const walletClient = createWalletClient({
-    account,
-    chain: arcCanteen,
-    transport: custom(window.ethereum),
-  });
-
-  return walletClient.writeContract({
-    address: demoUsdcAddress,
-    abi: erc20Abi,
-    functionName: "claim",
-  });
-}
-
-export async function hasClaimedDemoUsdc(account: Address): Promise<boolean> {
-  if (!demoUsdcAddress) {
-    throw new Error("Demo USDC address is not configured.");
-  }
-
-  return getBrowserSafePublicClient().readContract({
-    address: demoUsdcAddress,
-    abi: erc20Abi,
-    functionName: "hasClaimed",
-    args: [account],
-  });
-}
-
-async function readDemoUsdcAllowance(
+async function readUsdcAllowance(
   owner: Address,
   spender: Address,
   publicClient = getBrowserSafePublicClient(),
 ): Promise<bigint> {
-  if (!demoUsdcAddress) {
-    throw new Error("Demo USDC address is not configured.");
-  }
-
   return publicClient.readContract({
     address: demoUsdcAddress,
     abi: erc20Abi,
@@ -240,7 +193,7 @@ async function waitForApproval(
     }
     return;
   } catch (error) {
-    const allowance = await readDemoUsdcAllowance(owner, spender);
+    const allowance = await readUsdcAllowance(owner, spender);
     if (allowance >= amount) {
       return;
     }

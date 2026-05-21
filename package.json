@@ -9,9 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx \"tests/**/*.test.ts\"",
-    "compile:contracts": "solcjs --optimize --optimize-runs 200 --bin --abi -o build/contracts contracts/MockUSDC.sol contracts/SignalBond.sol",
-    "deploy:demo": "tsx scripts/deploy-demo.ts",
-    "seed:demo-signals": "tsx scripts/seed-demo-signals.ts"
+    "compile:contracts": "solcjs --optimize --optimize-runs 200 --bin --abi -o build/contracts contracts/SignalBond.sol",
+    "deploy:demo": "tsx scripts/deploy-demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",

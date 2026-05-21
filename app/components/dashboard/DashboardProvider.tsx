@@ -89,7 +89,7 @@ export type DashboardContextValue = {
   claimDemoUsdc: () => Promise<void>;
   runAgentCycle: () => Promise<void>;
   runQuickLifecycleDemo: () => Promise<void>;
-  publishProposal: () => Promise<void>;
+  publishProposal: (overrides?: { stakeUsdc?: number }) => Promise<void>;
   dismissProposal: () => void;
   selectSignal: (signal: Signal) => void;
   closeSignalDetails: () => void;
@@ -344,9 +344,17 @@ export default function DashboardProvider({
     }
   }, [scenarioIndex]);
 
-  const publishProposal = useCallback(async () => {
+  const publishProposal = useCallback(async (overrides?: { stakeUsdc?: number }) => {
     if (!agentProposal) return;
     const proposalSignal = scanToSignal(agentProposal, `proposal-${agentProposal.sourceHash}`);
+    const overrideStake = overrides?.stakeUsdc;
+    if (
+      typeof overrideStake === "number" &&
+      Number.isFinite(overrideStake) &&
+      overrideStake > 0
+    ) {
+      proposalSignal.stakeUsdc = overrideStake;
+    }
     const publishingQuickDemo = agentProposalMode === "quick-demo";
 
     if (contractsConfigured) {

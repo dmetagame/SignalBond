@@ -1,16 +1,9 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Loader2, Sparkles, X } from "lucide-react";
-import { useEffect } from "react";
+import { ArrowRight, CheckCircle2, Coins, Loader2, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useDashboard, type PublishStage } from "./DashboardProvider";
 import { shortHash } from "../../lib/dashboard-actions";
-
-const usd = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 const stageLabel: Record<PublishStage, string> = {
   idle: "Publish to Arc",
@@ -27,9 +20,16 @@ export default function ProposalModal() {
     publishStage,
     busy,
     walletAddress,
+    walletBalanceUsdc,
     publishProposal,
     dismissProposal,
   } = useDashboard();
+
+  const [stakeInput, setStakeInput] = useState<string>("");
+
+  useEffect(() => {
+    if (agentProposal) setStakeInput(String(agentProposal.stakeUsdc));
+  }, [agentProposal]);
 
   useEffect(() => {
     if (!agentProposal) return;
@@ -39,6 +39,12 @@ export default function ProposalModal() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [agentProposal, dismissProposal]);
+
+  const parsedStake = useMemo(() => Number(stakeInput), [stakeInput]);
+  const stakeIsValid =
+    Number.isFinite(parsedStake) && parsedStake > 0 && parsedStake <= 100_000;
+  const overBalance =
+    walletBalanceUsdc !== undefined && stakeIsValid && parsedStake > walletBalanceUsdc;
 
   if (!agentProposal) return null;
 
@@ -117,7 +123,15 @@ export default function ProposalModal() {
               value={`${(agentProposal.confidenceBps / 100).toFixed(0)}%`}
               mono
             />
-            <Stat label="Stake" value={usd(agentProposal.stakeUsdc)} mono />
+            <StakeInput
+              value={stakeInput}
+              onChange={setStakeInput}
+              disabled={publishing}
+              valid={stakeIsValid}
+              overBalance={overBalance}
+              suggested={agentProposal.stakeUsdc}
+              balance={walletBalanceUsdc}
+            />
           </div>
 
           <div className="flex items-center gap-2 rounded-xl bg-panel-muted px-3 py-2 text-sm text-muted">
@@ -181,8 +195,15 @@ export default function ProposalModal() {
             </button>
             <button
               type="button"
-              onClick={publishProposal}
-              disabled={publishing}
+              onClick={() =>
+                publishProposal(
+                  stakeIsValid && parsedStake !== agentProposal.stakeUsdc
+                    ? { stakeUsdc: parsedStake }
+                    : undefined,
+                )
+              }
+              disabled={publishing || !stakeIsValid}
+              title={!stakeIsValid ? "Enter a stake between 1 and 100,000 USDC" : undefined}
               className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
             >
               {publishing ? (
@@ -196,6 +217,56 @@ export default function ProposalModal() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function StakeInput({
+  value,
+  onChange,
+  disabled,
+  valid,
+  overBalance,
+  suggested,
+  balance,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  disabled: boolean;
+  valid: boolean;
+  overBalance: boolean;
+  suggested: number;
+  balance?: number;
+}) {
+  return (
+    <label className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-faint">
+        <Coins className="size-3" strokeWidth={2} />
+        Stake (USDC)
+      </span>
+      <input
+        type="number"
+        min="1"
+        step="1"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={[
+          "w-full rounded-md border bg-panel-muted px-2 py-1 font-mono text-sm font-semibold tabular-nums text-text focus:outline-none focus:ring-2",
+          valid && !overBalance
+            ? "border-line focus:border-accent focus:ring-accent/40"
+            : "border-danger/60 focus:border-danger focus:ring-danger/40",
+        ].join(" ")}
+      />
+      <span className="text-[10px] text-faint">
+        {balance !== undefined
+          ? `Balance ${balance.toLocaleString(undefined, { maximumFractionDigits: 0 })} · agent suggested ${suggested}`
+          : `Agent suggested ${suggested}`}
+        {overBalance && (
+          <span className="ml-1 text-danger">· exceeds balance</span>
+        )}
+      </span>
+    </label>
   );
 }
 

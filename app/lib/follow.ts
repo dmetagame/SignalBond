@@ -26,29 +26,53 @@ export type FollowSnapshot = {
 
 export type FollowMap = Record<string, FollowSnapshot>;
 
-function readStorage(): FollowMap {
-  if (typeof window === "undefined") return {};
+const EMPTY_MAP: FollowMap = Object.freeze({}) as FollowMap;
+
+let cachedRaw: string | null | undefined;
+let cachedMap: FollowMap = EMPTY_MAP;
+
+function parse(raw: string | null): FollowMap {
+  if (!raw) return EMPTY_MAP;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object") {
-      return parsed as FollowMap;
-    }
-    return {};
+    if (parsed && typeof parsed === "object") return parsed as FollowMap;
+    return EMPTY_MAP;
   } catch {
-    return {};
+    return EMPTY_MAP;
   }
+}
+
+function readStorage(): FollowMap {
+  if (typeof window === "undefined") return EMPTY_MAP;
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  // useSyncExternalStore needs a stable reference between calls when the
+  // underlying data hasn't changed; cache the parsed map keyed by the raw
+  // string so identity only flips after a real write.
+  if (raw === cachedRaw) return cachedMap;
+  cachedRaw = raw;
+  cachedMap = parse(raw);
+  return cachedMap;
 }
 
 function writeStorage(map: FollowMap): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    const serialized = JSON.stringify(map);
+    window.localStorage.setItem(STORAGE_KEY, serialized);
+    cachedRaw = serialized;
+    cachedMap = map;
     window.dispatchEvent(new CustomEvent(STORAGE_EVENT));
   } catch {
     // localStorage may be disabled in private mode; failures are non-fatal.
   }
+}
+
+function mutate(updater: (current: FollowMap) => FollowMap): void {
+  const current = readStorage();
+  // Spread to avoid mutating the cached reference in place — every write
+  // must produce a fresh object identity so subscribers re-render.
+  const next = updater({ ...current });
+  writeStorage(next);
 }
 
 export function snapshotAgent(agent: Agent): FollowSnapshot {
@@ -76,12 +100,11 @@ function subscribe(callback: () => void): () => void {
   };
 }
 
-const emptyMap: FollowMap = {};
 function getSnapshot(): FollowMap {
   return readStorage();
 }
 function getServerSnapshot(): FollowMap {
-  return emptyMap;
+  return EMPTY_MAP;
 }
 
 export function useFollowed(): {
@@ -100,17 +123,17 @@ export function useFollowed(): {
   );
 
   const pin = useCallback((agent: Agent) => {
-    const current = readStorage();
-    current[agent.id] = snapshotAgent(agent);
-    writeStorage(current);
+    mutate((current) => {
+      current[agent.id] = snapshotAgent(agent);
+      return current;
+    });
   }, []);
 
   const unpin = useCallback((agentId: string) => {
-    const current = readStorage();
-    if (current[agentId]) {
+    mutate((current) => {
       delete current[agentId];
-      writeStorage(current);
-    }
+      return current;
+    });
   }, []);
 
   const toggleFollow = useCallback(
@@ -122,26 +145,27 @@ export function useFollowed(): {
   );
 
   const clearAll = useCallback(() => {
-    writeStorage({});
+    writeStorage(EMPTY_MAP);
   }, []);
 
-  // Re-snapshot guard: if an agent's identity is in storage but the snapshot is
-  // malformed (e.g. from an older schema), drop it on first read.
+  // Re-snapshot guard: if an entry is malformed (e.g. older schema) drop it
+  // once on mount. Runs after first paint so it never blocks hydration.
   useEffect(() => {
-    let dirty = false;
     const current = readStorage();
-    for (const [id, snap] of Object.entries(current)) {
+    const next = { ...current };
+    let dirty = false;
+    for (const [id, snap] of Object.entries(next)) {
       if (
         !snap ||
         typeof snap !== "object" ||
         typeof snap.reputation !== "number" ||
         typeof snap.resolvedSignals !== "number"
       ) {
-        delete current[id];
+        delete next[id];
         dirty = true;
       }
     }
-    if (dirty) writeStorage(current);
+    if (dirty) writeStorage(next);
   }, []);
 
   return { followed, isFollowed, toggleFollow, pin, unpin, clearAll };

@@ -167,7 +167,7 @@ The dashboard divides by 100 for display (so the headline reads `72.5` rather th
 
 ## Settlement economics
 
-The resolver first asks CoinGecko for a historical price range around the signal expiry and uses the closest point as settlement evidence. If that range is unavailable, it transparently falls back to a live spot quote; markets without a reliable price mapping use a deterministic source-hash fallback so the demo can still close the loop.
+Each published signal stores its entry and target prices onchain in fixed-point form alongside the stake, market, direction, source hash, and explanation hash. The resolver first asks CoinGecko for a historical price range around the signal expiry and uses the closest point as settlement evidence. If that range is unavailable, it transparently falls back to a live spot quote; markets without a reliable price mapping use a deterministic source-hash fallback so the demo can still close the loop.
 
 Correct signals return the full USDC stake to the publisher. Incorrect signals increment `slashedStakeBalance()` and emit `StakeSlashed`; the owner can withdraw that reserve to `treasury()` via `withdrawSlashedStake(amount)`.
 

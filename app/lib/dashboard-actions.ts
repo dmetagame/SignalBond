@@ -86,6 +86,8 @@ export async function publishSignalOnchain(
   });
   const walletPublicClient = getWalletPublicClient();
   const stakeAmount = parseUnits(String(signal.stakeUsdc), 6);
+  const entryPriceE8 = priceToContractUnits(signal.entryPrice);
+  const targetPriceE8 = priceToContractUnits(signal.targetPrice);
 
   const existingAllowance = await readUsdcAllowance(
     account,
@@ -125,6 +127,8 @@ export async function publishSignalOnchain(
         signal.confidenceBps,
         stakeAmount,
         BigInt(Math.floor(new Date(signal.expiresAt).getTime() / 1000)),
+        entryPriceE8,
+        targetPriceE8,
         signal.sourceHash,
         keccak256(stringToHex(signal.reasoning)),
       ],
@@ -276,6 +280,13 @@ function pseudoHash(input: string): `0x${string}` {
 
   const fragment = Math.abs(hash).toString(16).padStart(8, "0");
   return `0x${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}${fragment}`;
+}
+
+function priceToContractUnits(value: number): bigint {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("Signal price must be greater than zero.");
+  }
+  return parseUnits(value.toFixed(8), 8);
 }
 
 export async function fetchAgentScan(

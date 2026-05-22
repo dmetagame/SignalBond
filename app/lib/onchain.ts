@@ -24,7 +24,7 @@ const LOG_CHUNK_BLOCKS = 9_999n;
 const TX_CONFIRMATION_TIMEOUT_MS = 45_000;
 
 const signalCreatedEvent = parseAbiItem(
-  "event SignalCreated(uint256 indexed signalId, bytes32 indexed agentId, address indexed publisher, string market, uint8 direction, uint16 confidenceBps, uint256 stakeAmount, uint64 expiresAt, bytes32 sourceDataHash, bytes32 explanationHash)",
+  "event SignalCreated(uint256 indexed signalId, bytes32 indexed agentId, address indexed publisher, string market, uint8 direction, uint16 confidenceBps, uint256 stakeAmount, uint64 expiresAt, uint256 entryPriceE8, uint256 targetPriceE8, bytes32 sourceDataHash, bytes32 explanationHash)",
 );
 
 type ContractSignal = {
@@ -37,6 +37,8 @@ type ContractSignal = {
   createdAt: bigint;
   expiresAt: bigint;
   stakeAmount: bigint;
+  entryPriceE8: bigint;
+  targetPriceE8: bigint;
   sourceDataHash: Hex;
   explanationHash: Hex;
   resolved: boolean;
@@ -273,8 +275,8 @@ function contractSignalToSignal(
     direction: contractToDirection(signal.direction),
     confidenceBps: Number(signal.confidenceBps),
     stakeUsdc: Number(formatUnits(signal.stakeAmount, 6)),
-    entryPrice: 1,
-    targetPrice: 1,
+    entryPrice: Number(formatUnits(signal.entryPriceE8, 8)),
+    targetPrice: Number(formatUnits(signal.targetPriceE8, 8)),
     createdAt,
     expiresAt,
     status: signal.resolved ? "settled" : "active",
@@ -376,11 +378,13 @@ function toContractSignal(raw: unknown): ContractSignal {
     createdAt: readTupleValue<bigint>(tuple, "createdAt", 6),
     expiresAt: readTupleValue<bigint>(tuple, "expiresAt", 7),
     stakeAmount: readTupleValue<bigint>(tuple, "stakeAmount", 8),
-    sourceDataHash: readTupleValue<Hex>(tuple, "sourceDataHash", 9),
-    explanationHash: readTupleValue<Hex>(tuple, "explanationHash", 10),
-    resolved: readTupleValue<boolean>(tuple, "resolved", 11),
-    correct: readTupleValue<boolean>(tuple, "correct", 12),
-    pnlBps: readTupleValue<bigint>(tuple, "pnlBps", 13),
+    entryPriceE8: readTupleValue<bigint>(tuple, "entryPriceE8", 9) ?? 100_000_000n,
+    targetPriceE8: readTupleValue<bigint>(tuple, "targetPriceE8", 10) ?? 100_000_000n,
+    sourceDataHash: readTupleValue<Hex>(tuple, "sourceDataHash", 11),
+    explanationHash: readTupleValue<Hex>(tuple, "explanationHash", 12),
+    resolved: readTupleValue<boolean>(tuple, "resolved", 13),
+    correct: readTupleValue<boolean>(tuple, "correct", 14),
+    pnlBps: readTupleValue<bigint>(tuple, "pnlBps", 15),
   };
 }
 

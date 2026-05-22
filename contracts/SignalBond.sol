@@ -24,6 +24,8 @@ contract SignalBond {
         uint64 createdAt;
         uint64 expiresAt;
         uint256 stakeAmount;
+        uint256 entryPriceE8;
+        uint256 targetPriceE8;
         bytes32 sourceDataHash;
         bytes32 explanationHash;
         bool resolved;
@@ -58,6 +60,8 @@ contract SignalBond {
         uint16 confidenceBps,
         uint256 stakeAmount,
         uint64 expiresAt,
+        uint256 entryPriceE8,
+        uint256 targetPriceE8,
         bytes32 sourceDataHash,
         bytes32 explanationHash
     );
@@ -104,6 +108,8 @@ contract SignalBond {
         uint16 confidenceBps,
         uint256 stakeAmount,
         uint64 expiresAt,
+        uint256 entryPriceE8,
+        uint256 targetPriceE8,
         bytes32 sourceDataHash,
         bytes32 explanationHash
     ) external returns (uint256 signalId) {
@@ -112,6 +118,7 @@ contract SignalBond {
         require(confidenceBps > 0 && confidenceBps <= 10_000, "BAD_CONFIDENCE");
         require(stakeAmount > 0, "NO_STAKE");
         require(expiresAt > block.timestamp, "BAD_EXPIRY");
+        require(entryPriceE8 > 0 && targetPriceE8 > 0, "BAD_PRICE");
 
         signalId = nextSignalId++;
         bool pulled = stakeToken.transferFrom(msg.sender, address(this), stakeAmount);
@@ -127,6 +134,8 @@ contract SignalBond {
             createdAt: uint64(block.timestamp),
             expiresAt: expiresAt,
             stakeAmount: stakeAmount,
+            entryPriceE8: entryPriceE8,
+            targetPriceE8: targetPriceE8,
             sourceDataHash: sourceDataHash,
             explanationHash: explanationHash,
             resolved: false,
@@ -143,6 +152,8 @@ contract SignalBond {
             confidenceBps,
             stakeAmount,
             expiresAt,
+            entryPriceE8,
+            targetPriceE8,
             sourceDataHash,
             explanationHash
         );

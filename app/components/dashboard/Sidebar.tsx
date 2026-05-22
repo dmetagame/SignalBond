@@ -20,6 +20,7 @@ import {
   ExternalLink,
   Waypoints,
   X,
+  Gavel,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -54,6 +55,7 @@ function buildPrimaryNav(activeSignalCount: number): NavItem[] {
 const onchainNav: NavItem[] = [
   { label: "Contracts", icon: FileCode2, href: "/onchain/contracts" },
   { label: "Transactions", icon: ArrowLeftRight, href: "/onchain/transactions" },
+  { label: "Auto-resolver", icon: Gavel, href: "/resolver" },
   { label: "Resolver log", icon: ListChecks, href: "/onchain/resolver-log" },
 ];
 

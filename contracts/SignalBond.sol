@@ -42,7 +42,9 @@ contract SignalBond {
     IERC20 public immutable stakeToken;
     address public owner;
     address public resolver;
+    address public treasury;
     uint256 public nextSignalId = 1;
+    uint256 public slashedStakeBalance;
 
     mapping(uint256 => Signal) private signals;
     mapping(bytes32 => AgentScore) private scores;
@@ -69,6 +71,9 @@ contract SignalBond {
     );
 
     event ResolverUpdated(address indexed resolver);
+    event TreasuryUpdated(address indexed treasury);
+    event StakeSlashed(uint256 indexed signalId, address indexed publisher, uint256 amount, address indexed treasury);
+    event SlashedStakeWithdrawn(address indexed treasury, uint256 amount);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     modifier onlyOwner() {
@@ -86,8 +91,10 @@ contract SignalBond {
         stakeToken = IERC20(stakeToken_);
         owner = msg.sender;
         resolver = resolver_ == address(0) ? msg.sender : resolver_;
+        treasury = msg.sender;
         emit OwnershipTransferred(address(0), msg.sender);
         emit ResolverUpdated(resolver);
+        emit TreasuryUpdated(treasury);
     }
 
     function createSignal(
@@ -156,6 +163,9 @@ contract SignalBond {
         if (correct) {
             score.correctSignals += 1;
             require(stakeToken.transfer(signal.publisher, signal.stakeAmount), "STAKE_RETURN_FAILED");
+        } else {
+            slashedStakeBalance += signal.stakeAmount;
+            emit StakeSlashed(signalId, signal.publisher, signal.stakeAmount, treasury);
         }
 
         score.cumulativePnLBps += pnlBps;
@@ -179,6 +189,20 @@ contract SignalBond {
         require(resolver_ != address(0), "BAD_RESOLVER");
         resolver = resolver_;
         emit ResolverUpdated(resolver_);
+    }
+
+    function setTreasury(address treasury_) external onlyOwner {
+        require(treasury_ != address(0), "BAD_TREASURY");
+        treasury = treasury_;
+        emit TreasuryUpdated(treasury_);
+    }
+
+    function withdrawSlashedStake(uint256 amount) external onlyOwner {
+        require(amount > 0, "NO_AMOUNT");
+        require(amount <= slashedStakeBalance, "INSUFFICIENT_SLASHED");
+        slashedStakeBalance -= amount;
+        require(stakeToken.transfer(treasury, amount), "TREASURY_TRANSFER_FAILED");
+        emit SlashedStakeWithdrawn(treasury, amount);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {

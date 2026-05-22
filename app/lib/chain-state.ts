@@ -18,10 +18,12 @@ export type ChainState = {
   generatedAt: string;
   owner: Address;
   resolver: Address;
+  treasury: Address;
   signalCount: number;
   signals: Signal[];
   summary: {
     activeSignals: number;
+    slashedStakeUsdc: number;
     settledSignals: number;
     totalStakeUsdc: number;
   };
@@ -40,10 +42,12 @@ export function serializeDashboard(dashboard: OnchainDashboard): ChainState {
     generatedAt: new Date().toISOString(),
     owner: dashboard.owner,
     resolver: dashboard.resolver,
+    treasury: dashboard.treasury,
     signalCount: dashboard.signalCount,
     signals: dashboard.signals,
     summary: {
       activeSignals: dashboard.signals.filter((signal) => signal.status === "active").length,
+      slashedStakeUsdc: dashboard.slashedStakeUsdc,
       settledSignals: dashboard.signals.filter((signal) => signal.status === "settled").length,
       totalStakeUsdc: dashboard.signals.reduce((sum, signal) => sum + signal.stakeUsdc, 0),
     },

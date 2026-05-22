@@ -57,8 +57,10 @@ export type OnchainDashboard = {
   blockNumber: bigint;
   owner: Address;
   resolver: Address;
+  treasury: Address;
   signalCount: number;
   signals: Signal[];
+  slashedStakeUsdc: number;
   walletBalanceUsdc?: number;
 };
 
@@ -138,6 +140,23 @@ export async function readOnchainDashboard(
         ),
       ),
     ]);
+
+  const [treasury, slashedStakeBalance] = await Promise.all([
+    publicClient
+      .readContract({
+        address: bondAddress,
+        abi: signalBondAbi,
+        functionName: "treasury",
+      })
+      .catch(() => owner),
+    publicClient
+      .readContract({
+        address: bondAddress,
+        abi: signalBondAbi,
+        functionName: "slashedStakeBalance",
+      })
+      .catch(() => 0n),
+  ]);
 
   const latestSignalId = Math.max(0, Number(nextSignalId) - 1);
   const firstSignalId = Math.max(1, latestSignalId - MAX_SIGNALS_TO_READ + 1);
@@ -226,8 +245,10 @@ export async function readOnchainDashboard(
     blockNumber,
     owner,
     resolver,
+    treasury,
     signalCount: latestSignalId,
     signals,
+    slashedStakeUsdc: Number(formatUnits(slashedStakeBalance, 6)),
     walletBalanceUsdc:
       walletBalance === undefined ? undefined : Number(formatUnits(walletBalance, 6)),
   };

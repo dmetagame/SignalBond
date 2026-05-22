@@ -33,7 +33,15 @@ type Plan = {
     exitPrice: number;
     reasoning: string;
   };
-  quote?: { symbol: string; price: number; source: string; fetchedAt: string };
+  quote?: {
+    symbol: string;
+    price: number;
+    source: string;
+    fetchedAt: string;
+    observedAt: string;
+    proofUrl: string;
+    method: "historical-range" | "spot";
+  };
 };
 
 type Execution = Plan & {
@@ -122,7 +130,7 @@ export default function ResolverPage() {
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
       <SectionHeader
         title="Auto-resolver"
-        subtitle="Closes the loop: scans expired signals, fetches real prices from CoinGecko, and writes the verdict back onchain."
+        subtitle="Closes the loop: scans expired signals, fetches expiry-time price evidence from CoinGecko when available, and writes the verdict back onchain."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -343,7 +351,7 @@ function ResolutionCard({
         </span>
       </header>
 
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <Mini label="Entry" value={plan.entryPrice.toLocaleString(undefined, { maximumFractionDigits: 4 })} />
         <Mini
           label="Exit"
@@ -354,9 +362,28 @@ function ResolutionCard({
           label="Source"
           value={plan.quote ? plan.quote.source : "deterministic"}
         />
+        <Mini
+          label="Observed"
+          value={
+            plan.quote
+              ? new Date(plan.quote.observedAt).toLocaleTimeString()
+              : "source hash"
+          }
+        />
       </div>
 
       <p className="text-[11px] leading-relaxed text-muted">{plan.verdict.reasoning}</p>
+
+      {plan.quote?.proofUrl && (
+        <Link
+          href={plan.quote.proofUrl}
+          target="_blank"
+          className="inline-flex items-center gap-1.5 self-start rounded-lg border border-line-soft bg-panel-muted px-2.5 py-1 text-[11px] font-medium text-muted hover:text-text"
+        >
+          Quote proof
+          <ExternalLink className="size-3" strokeWidth={2} />
+        </Link>
+      )}
 
       {exec && (
         <Link

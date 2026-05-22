@@ -12,6 +12,9 @@ export type MarketQuote = {
   price: number;
   source: string;
   fetchedAt: string;
+  observedAt: string;
+  proofUrl: string;
+  method: "historical-range" | "spot";
 };
 
 export type ResolutionVerdict = {
@@ -48,12 +51,58 @@ export function marketToCoingeckoId(market: string): string | undefined {
   return head ? COINGECKO_BY_BASE[head] : undefined;
 }
 
-const COINGECKO_BASE = "https://api.coingecko.com/api/v3/simple/price";
+const COINGECKO_API_BASE = "https://api.coingecko.com/api/v3";
+const HISTORICAL_WINDOW_MS = 45 * 60_000;
 
-export async function fetchMarketQuote(market: string): Promise<MarketQuote | undefined> {
+export async function fetchMarketQuote(
+  market: string,
+  observedAt = new Date(),
+): Promise<MarketQuote | undefined> {
   const id = marketToCoingeckoId(market);
   if (!id) return undefined;
-  const url = `${COINGECKO_BASE}?ids=${id}&vs_currencies=usd`;
+
+  const historical = await fetchHistoricalQuote(id, observedAt);
+  if (historical) return historical;
+
+  return fetchSpotQuote(id);
+}
+
+async function fetchHistoricalQuote(
+  id: string,
+  observedAt: Date,
+): Promise<MarketQuote | undefined> {
+  const observedMs = observedAt.getTime();
+  if (!Number.isFinite(observedMs)) return undefined;
+
+  const from = Math.floor((observedMs - HISTORICAL_WINDOW_MS) / 1000);
+  const to = Math.floor((observedMs + HISTORICAL_WINDOW_MS) / 1000);
+  const url = `${COINGECKO_API_BASE}/coins/${id}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`;
+  try {
+    const res = await fetch(url, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) return undefined;
+    const json = (await res.json()) as { prices?: [number, number][] };
+    const point = pickClosestPricePoint(json.prices ?? [], observedMs);
+    if (!point) return undefined;
+    const [timestampMs, price] = point;
+    return {
+      symbol: id,
+      price,
+      source: "coingecko:historical",
+      fetchedAt: new Date().toISOString(),
+      observedAt: new Date(timestampMs).toISOString(),
+      proofUrl: url,
+      method: "historical-range",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchSpotQuote(id: string): Promise<MarketQuote | undefined> {
+  const url = `${COINGECKO_API_BASE}/simple/price?ids=${id}&vs_currencies=usd`;
   try {
     const res = await fetch(url, {
       headers: { accept: "application/json" },
@@ -63,15 +112,37 @@ export async function fetchMarketQuote(market: string): Promise<MarketQuote | un
     const json = (await res.json()) as Record<string, { usd?: number }>;
     const price = json[id]?.usd;
     if (typeof price !== "number" || !Number.isFinite(price)) return undefined;
+    const fetchedAt = new Date().toISOString();
     return {
       symbol: id,
       price,
-      source: "coingecko",
-      fetchedAt: new Date().toISOString(),
+      source: "coingecko:spot-fallback",
+      fetchedAt,
+      observedAt: fetchedAt,
+      proofUrl: url,
+      method: "spot",
     };
   } catch {
     return undefined;
   }
+}
+
+function pickClosestPricePoint(
+  prices: [number, number][],
+  targetMs: number,
+): [number, number] | undefined {
+  let closest: [number, number] | undefined;
+  let closestDistance = Number.POSITIVE_INFINITY;
+  for (const point of prices) {
+    const [timestampMs, price] = point;
+    if (!Number.isFinite(timestampMs) || !Number.isFinite(price)) continue;
+    const distance = Math.abs(timestampMs - targetMs);
+    if (distance < closestDistance) {
+      closest = point;
+      closestDistance = distance;
+    }
+  }
+  return closest;
 }
 
 /**
@@ -82,12 +153,19 @@ export async function fetchMarketQuote(market: string): Promise<MarketQuote | un
  * pnlBps is signed by the direction so a 2% move in the called direction always
  * shows +200, a 2% move against the call shows -200, regardless of side.
  */
-export function judgeOutcome(signal: Signal, exitPrice: number): ResolutionVerdict {
+export function judgeOutcome(
+  signal: Signal,
+  exitPrice: number,
+  quote?: MarketQuote,
+): ResolutionVerdict {
   const entry = signal.entryPrice;
   const moveBps = entry === 0 ? 0 : Math.round(((exitPrice - entry) / entry) * 10_000);
   const bullish = isBullishCall(signal.direction);
   const directionalBps = bullish ? moveBps : -moveBps;
   const correct = directionalBps >= 0;
+  const quoteContext = quote
+    ? ` Quote: ${quote.source} observed ${new Date(quote.observedAt).toISOString()}.`
+    : "";
   return {
     correct,
     pnlBps: directionalBps,
@@ -95,7 +173,8 @@ export function judgeOutcome(signal: Signal, exitPrice: number): ResolutionVerdi
     reasoning:
       `${signal.market} settled at ${exitPrice.toLocaleString(undefined, { maximumFractionDigits: 4 })}; ` +
       `entry was ${entry.toLocaleString(undefined, { maximumFractionDigits: 4 })}. ` +
-      `Move ${formatSignedBps(moveBps)} → ${signal.direction} call ${correct ? "correct" : "wrong"}.`,
+      `Move ${formatSignedBps(moveBps)} -> ${signal.direction} call ${correct ? "correct" : "wrong"}.` +
+      quoteContext,
   };
 }
 
@@ -150,9 +229,9 @@ export async function resolveVerdict(signal: Signal): Promise<{
   verdict: ResolutionVerdict;
   quote?: MarketQuote;
 }> {
-  const quote = await fetchMarketQuote(signal.market);
+  const quote = await fetchMarketQuote(signal.market, new Date(signal.expiresAt));
   if (quote) {
-    return { verdict: judgeOutcome(signal, quote.price), quote };
+    return { verdict: judgeOutcome(signal, quote.price, quote), quote };
   }
   return { verdict: deterministicVerdict(signal) };
 }

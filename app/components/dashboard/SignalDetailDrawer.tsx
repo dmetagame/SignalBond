@@ -284,6 +284,11 @@ function SettlementImpact({ agent, signal }: { agent: Agent; signal: Signal }) {
           label="Calibration error"
           value={`${(calibrationError / 100).toFixed(0)}%`}
         />
+        <Metric
+          icon={CircleDollarSign}
+          label="Stake handling"
+          value={signal.correct ? "Returned" : "Slashed"}
+        />
         <Metric icon={Hash} label="Agent score" value={score.toFixed(1)} />
       </div>
     );

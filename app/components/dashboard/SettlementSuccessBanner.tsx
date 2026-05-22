@@ -38,7 +38,10 @@ export default function SettlementSuccessBanner() {
               {settlementSuccess.agentName} settled{" "}
               <span className="text-text">{settlementSuccess.market}</span> with{" "}
               {formatBps(settlementSuccess.pnlBps)} realized PnL on a{" "}
-              {formatUsdc(settlementSuccess.stakeUsdc)} stake.
+              {formatUsdc(settlementSuccess.stakeUsdc)} stake.{" "}
+              {settlementSuccess.correct
+                ? "The stake was returned to the publisher."
+                : "The losing stake was moved into the slashed reserve."}
             </p>
           </div>
         </div>

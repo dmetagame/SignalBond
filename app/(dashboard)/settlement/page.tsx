@@ -13,6 +13,8 @@ export default function SettlementPage() {
     agents,
     resolverAddress,
     ownerAddress,
+    treasuryAddress,
+    slashedStakeUsdc,
     contractSignalCount,
     lastOnchainTx,
   } = useDashboard();
@@ -30,7 +32,7 @@ export default function SettlementPage() {
         subtitle="Resolved calls, resolver wallet, and the contract lane."
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <InfoCard
           icon={<Gavel className="size-4" strokeWidth={1.75} />}
           label="Resolved signals"
@@ -50,6 +52,19 @@ export default function SettlementPage() {
           value={ownerAddress ? shortHash(ownerAddress) : "—"}
           href={ownerAddress ? arcAddressUrl(ownerAddress) : undefined}
           mono
+        />
+        <InfoCard
+          icon={<ShieldCheck className="size-4" strokeWidth={1.75} />}
+          label="Treasury"
+          value={treasuryAddress ? shortHash(treasuryAddress) : "—"}
+          href={treasuryAddress ? arcAddressUrl(treasuryAddress) : undefined}
+          mono
+        />
+        <InfoCard
+          icon={<Gavel className="size-4" strokeWidth={1.75} />}
+          label="Slashed reserve"
+          value={formatUsdc(slashedStakeUsdc)}
+          hint="Losing stakes withdrawable by owner"
         />
         <InfoCard
           icon={<ExternalLink className="size-4" strokeWidth={1.75} />}

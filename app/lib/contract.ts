@@ -59,6 +59,20 @@ export const signalBondAbi = [
   },
   {
     type: "function",
+    name: "treasury",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "slashedStakeBalance",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "nextSignalId",
     stateMutability: "view",
     inputs: [],
@@ -89,6 +103,20 @@ export const signalBondAbi = [
       { name: "correct", type: "bool" },
       { name: "pnlBps", type: "int256" },
     ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setTreasury",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "treasury_", type: "address" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "withdrawSlashedStake",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "amount", type: "uint256" }],
     outputs: [],
   },
   {

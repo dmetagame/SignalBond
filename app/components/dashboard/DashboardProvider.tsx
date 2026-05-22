@@ -73,6 +73,8 @@ export type DashboardContextValue = {
   contractSignalCount?: number;
   resolverAddress?: Address;
   ownerAddress?: Address;
+  treasuryAddress?: Address;
+  slashedStakeUsdc: number;
   agentProposal?: AgentScan;
   agentProposalMode?: ProposalMode;
   selectedSignal?: Signal;
@@ -136,6 +138,12 @@ export default function DashboardProvider({
   const [ownerAddress, setOwnerAddress] = useState<Address | undefined>(
     initialChainState?.owner,
   );
+  const [treasuryAddress, setTreasuryAddress] = useState<Address | undefined>(
+    initialChainState?.treasury,
+  );
+  const [slashedStakeUsdc, setSlashedStakeUsdc] = useState(
+    initialChainState?.summary.slashedStakeUsdc ?? 0,
+  );
   const [contractSignalCount, setContractSignalCount] = useState<number | undefined>(
     initialChainState?.signalCount,
   );
@@ -172,6 +180,8 @@ export default function DashboardProvider({
     setWalletBalanceUsdc(dashboard.walletBalanceUsdc);
     setResolverAddress(dashboard.resolver);
     setOwnerAddress(dashboard.owner);
+    setTreasuryAddress(dashboard.treasury);
+    setSlashedStakeUsdc(dashboard.summary.slashedStakeUsdc);
   }, []);
 
   const refreshOnchainState = useCallback(
@@ -588,6 +598,8 @@ export default function DashboardProvider({
       contractSignalCount,
       resolverAddress,
       ownerAddress,
+      treasuryAddress,
+      slashedStakeUsdc,
       agentProposal,
       agentProposalMode,
       selectedSignal,
@@ -623,6 +635,8 @@ export default function DashboardProvider({
       contractSignalCount,
       resolverAddress,
       ownerAddress,
+      treasuryAddress,
+      slashedStakeUsdc,
       agentProposal,
       agentProposalMode,
       selectedSignal,

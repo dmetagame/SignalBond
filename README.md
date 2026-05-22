@@ -12,14 +12,14 @@ AI agents are becoming economic actors, but the rails for accountability don't e
 1. **Connect wallet** on Arc Testnet (chain `0x4cef52`). The sidebar links to Circle's faucet (`faucet.circle.com`, 20 USDC every 2h) so the user can top up their stake balance.
 2. Hit **Run Agent Cycle** in the dashboard header. The server-side proposal desk uses Groq + Llama 3.3 70B by default, Claude Haiku as an optional fallback, and deterministic templates only when no LLM runtime is available.
 3. The **proposal modal** shows the call (market, side, confidence, stake, entry → target, sources). Click **Publish** to commit to Arc: USDC `approve` → `createSignal` → onchain confirmation, with an arcscan link in the success banner.
-4. Once the signal expires, the bearer-authenticated resolver settles it onchain, the contract pays back stake on a win, and the agent's reputation updates against the contract formula.
+4. Once the signal expires, the bearer-authenticated resolver settles it onchain using expiry-time CoinGecko evidence where available. The contract pays back stake on a win; losing stakes move into an explicit slashed reserve withdrawable to the treasury.
 5. The **Settlement** and **Resolver Log** pages, plus the notifications bell, surface every settlement with its arcscan tx link.
 
 ## Why this fits Agora
 
 - **Discovery** — Agent Book + ranked Agents page; signals are filterable by status and market.
 - **Transaction** — Real `createSignal` + `resolveSignal` on Arc, USDC-staked. ~$0.01 fees, sub-second finality.
-- **Reputation** — `getScore(agentId)` returns the canonical reputation. The dashboard's offchain `calculateScore` mirrors the contract formula exactly (`winRateBps + cumPnL/4`) so the UI never drifts from chain state.
+- **Reputation** — `getScore(agentId)` returns the canonical reputation. The dashboard's offchain `calculateScore` mirrors the contract formula exactly (`winRateBps + cumPnL/4`) so the UI never drifts from chain state. Losing bonds are accounted in `slashedStakeBalance()` instead of being silently stranded.
 - **AI agents** — `proposeSignal` is implemented as a structured LLM call on the server (`/api/agent-scan`). Default provider is **Groq + Llama 3.3 70B** (free tier, sub-second), with **Claude Haiku 4.5** as an alternative when `ANTHROPIC_API_KEY` is set. Falls back to deterministic templates if neither is configured. The response includes an `agentRuntime` field so judges can verify which path served the proposal.
 
 ## Tech stack
@@ -145,7 +145,7 @@ app/
     resolve/route.ts          Dry-run resolver preview; bearer-authenticated execution
 
 contracts/
-  SignalBond.sol              Stake escrow, resolver-gated settlement, reputation accounting
+  SignalBond.sol              Stake escrow, resolver-gated settlement, slashed reserve, reputation accounting
 
 scripts/
   deploy-demo.ts              Deploy SignalBond against Arc Testnet USDC by default
@@ -164,6 +164,12 @@ reputation   = winRateBps + pnlComponent
 ```
 
 The dashboard divides by 100 for display (so the headline reads `72.5` rather than `7250 bps`). `lib/reputation.onchainReputation()` returns the raw int256 directly for explorer-equivalence.
+
+## Settlement economics
+
+The resolver first asks CoinGecko for a historical price range around the signal expiry and uses the closest point as settlement evidence. If that range is unavailable, it transparently falls back to a live spot quote; markets without a reliable price mapping use a deterministic source-hash fallback so the demo can still close the loop.
+
+Correct signals return the full USDC stake to the publisher. Incorrect signals increment `slashedStakeBalance()` and emit `StakeSlashed`; the owner can withdraw that reserve to `treasury()` via `withdrawSlashedStake(amount)`.
 
 ## Circle stack integration
 

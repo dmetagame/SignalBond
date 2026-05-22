@@ -48,7 +48,7 @@ export async function GET(request: Request) {
         signal,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Groq scan failed";
+      const message = fallbackReason(error, "groq");
       if (llmConfigured()) {
         try {
           const signal = await generateAgentScanWithLlm({
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
         signal,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Anthropic scan failed";
+      const message = fallbackReason(error, "anthropic");
       const signal = generateAgentScan({ sequence: seq, expiresInSeconds });
       return NextResponse.json({
         agentRuntime: "deterministic-scan-v1",
@@ -107,4 +107,12 @@ export async function GET(request: Request) {
     generatedAt: signal.generatedAt,
     signal,
   });
+}
+
+function fallbackReason(error: unknown, provider: "groq" | "anthropic"): string {
+  const summary = error instanceof Error ? error.message : String(error);
+  console.warn(`SignalBond ${provider} proposal failed; serving deterministic fallback.`, {
+    error: summary,
+  });
+  return `${provider}-proposal-runtime-unavailable`;
 }

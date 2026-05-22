@@ -1,8 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { keccak256, stringToHex } from "viem";
 import type { AgentScan } from "./agent-scan";
+import {
+  normalizeProposeSignalArgs,
+  proposeSignalParameters,
+  type ProposeSignalArgs,
+} from "./agent-scan-schema";
 import { agents as seedAgents, marketTape } from "./seed";
-import type { Direction } from "./types";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_WINDOW_SECONDS = 24 * 60 * 60;
@@ -23,84 +27,7 @@ const AGENT_ROSTER_BLOCK = `Agent roster:\n${seedAgents
 const proposeSignalTool: Anthropic.Tool = {
   name: "proposeSignal",
   description: "Publish a single accountable market signal as one of the four SignalBond agents.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    required: [
-      "agentId",
-      "market",
-      "venue",
-      "direction",
-      "confidenceBps",
-      "stakeUsdc",
-      "entryPrice",
-      "targetPrice",
-      "reasoning",
-      "sources",
-      "windowHours",
-    ],
-    properties: {
-      agentId: {
-        type: "string",
-        enum: seedAgents.map((a) => a.id),
-        description: "Which agent is publishing this call.",
-      },
-      market: { type: "string", description: "Short label for the market or contract." },
-      venue: { type: "string", description: "Where the trade settles or quotes from." },
-      direction: {
-        type: "string",
-        enum: ["LONG", "SHORT", "YES", "NO"],
-        description: "Side of the call.",
-      },
-      confidenceBps: {
-        type: "integer",
-        minimum: 1,
-        maximum: 10000,
-        description: "Conviction in basis points.",
-      },
-      stakeUsdc: {
-        type: "integer",
-        minimum: 200,
-        maximum: 800,
-        description: "Stake in whole USDC.",
-      },
-      entryPrice: { type: "number", description: "Entry price for the position." },
-      targetPrice: { type: "number", description: "Target/payoff price." },
-      reasoning: {
-        type: "string",
-        minLength: 60,
-        maxLength: 600,
-        description: "One-paragraph desk memo explaining the call.",
-      },
-      sources: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 2,
-        maxItems: 5,
-        description: "Short data-source tags the agent leaned on.",
-      },
-      windowHours: {
-        type: "integer",
-        minimum: 1,
-        maximum: 96,
-        description: "How long the signal stays open before resolution.",
-      },
-    },
-  },
-};
-
-type ProposeSignalArgs = {
-  agentId: string;
-  market: string;
-  venue: string;
-  direction: Direction;
-  confidenceBps: number;
-  stakeUsdc: number;
-  entryPrice: number;
-  targetPrice: number;
-  reasoning: string;
-  sources: string[];
-  windowHours: number;
+  input_schema: proposeSignalParameters as unknown as Anthropic.Tool["input_schema"],
 };
 
 export function llmConfigured(): boolean {
@@ -163,11 +90,7 @@ export async function generateAgentScanWithLlm({
     throw new Error("LLM did not call proposeSignal.");
   }
 
-  const args = toolUse.input as ProposeSignalArgs;
-
-  if (!seedAgents.some((a) => a.id === args.agentId)) {
-    throw new Error(`LLM picked unknown agentId: ${args.agentId}`);
-  }
+  const args: ProposeSignalArgs = normalizeProposeSignalArgs(toolUse.input);
 
   const generatedAt = now.toISOString();
   const expiresAt = new Date(

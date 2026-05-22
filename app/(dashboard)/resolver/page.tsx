@@ -95,7 +95,6 @@ export default function ResolverPage() {
       const res = await fetch("/api/resolve", {
         method: "POST",
         cache: "no-store",
-        headers: { "x-resolver-same-origin": "1" },
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
@@ -117,7 +116,7 @@ export default function ResolverPage() {
   const failed = payload?.failed ?? [];
   const dueCount = plans.length || executed.length;
   const mode = payload?.mode;
-  const canExecute = mode !== "dry-run-no-key";
+  const canExecute = false;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -142,7 +141,7 @@ export default function ResolverPage() {
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
               title={
                 !canExecute
-                  ? "Set RESOLVER_PRIVATE_KEY in Vercel env to enable execution"
+                  ? "Resolver execution is restricted to Vercel cron or operator bearer auth"
                   : dueCount === 0
                     ? "No expired signals to resolve"
                     : undefined

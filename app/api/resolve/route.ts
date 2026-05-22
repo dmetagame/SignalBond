@@ -13,6 +13,10 @@ import {
   resolverConfigured,
   submitResolution,
 } from "../../lib/resolver-server";
+import {
+  evaluateResolverExecuteAuth,
+  hasResolverBearerAuth,
+} from "../../lib/resolver-auth";
 import { arcTxUrl } from "../../lib/explorer";
 
 export const dynamic = "force-dynamic";
@@ -43,20 +47,21 @@ type Failure = {
 };
 
 /**
- * GET — dry-run: returns the resolver's plan (which signals it would resolve and how)
- * POST — execute: submits resolveSignal transactions for each planned outcome
+ * GET — dry-run for anonymous dashboard previews, execute only for Vercel cron
+ * requests carrying Authorization: Bearer ${CRON_SECRET}.
+ * POST — execute for operator calls carrying the same bearer secret.
  *
  * Both routes are safe to call without RESOLVER_PRIVATE_KEY set; the executor
  * just returns dry-run results in that case so the UI can still show the plan.
  */
 
 export async function GET(request: Request) {
-  // Vercel crons can only fire GET, so the cron path needs to execute on GET.
-  // We distinguish operator/cron calls from anonymous dashboard previews by
-  // either the Bearer secret or an explicit `?execute=1` flag.
+  // Vercel crons can only fire GET, so bearer-authenticated cron requests
+  // execute. Anonymous requests always remain dry-run previews unless they ask
+  // for execute explicitly, in which case they receive an auth error.
   const url = new URL(request.url);
   const wantsExecute =
-    url.searchParams.get("execute") === "1" || isCronAuthorized(request);
+    url.searchParams.get("execute") === "1" || hasResolverBearerAuth(request);
   return handle(request, wantsExecute ? "execute" : "dry-run");
 }
 
@@ -65,16 +70,18 @@ export async function POST(request: Request) {
 }
 
 async function handle(request: Request, mode: "dry-run" | "execute") {
+  if (mode === "execute") {
+    const auth = evaluateResolverExecuteAuth(request);
+    if (!auth.ok) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+  }
+
   if (!contractsConfigured) {
     return NextResponse.json(
       { error: "SignalBond contract address is not configured." },
       { status: 503 },
     );
-  }
-
-  if (mode === "execute") {
-    const authError = checkCronAuth(request);
-    if (authError) return authError;
   }
 
   try {
@@ -140,26 +147,4 @@ async function handle(request: Request, mode: "dry-run" | "execute") {
       { status: 500 },
     );
   }
-}
-
-/**
- * Vercel cron requests include `Authorization: Bearer ${CRON_SECRET}` when
- * `CRON_SECRET` is set in project env. Require the header in production once
- * the secret is provisioned; the dashboard's manual "Resolve now" button
- * passes the same-origin marker so curious visitors can still preview/execute
- * locally during development.
- */
-function checkCronAuth(request: Request): NextResponse | undefined {
-  if (isCronAuthorized(request)) return undefined;
-  if (!process.env.CRON_SECRET) return undefined;
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-
-function isCronAuthorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization") ?? "";
-  if (header === `Bearer ${secret}`) return true;
-  const sameOrigin = request.headers.get("x-resolver-same-origin");
-  return sameOrigin === "1";
 }

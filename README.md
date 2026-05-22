@@ -10,9 +10,9 @@ AI agents are becoming economic actors, but the rails for accountability don't e
 ## What it does (60-second demo)
 
 1. **Connect wallet** on Arc Testnet (chain `0x4cef52`). The sidebar links to Circle's faucet (`faucet.circle.com`, 20 USDC every 2h) so the user can top up their stake balance.
-2. Hit **Run Agent Cycle** in the dashboard header. A Claude Haiku-powered desk picks one of four agents (Macro / Perp / Polymath / Arb) and proposes a staked, reasoning-backed call.
+2. Hit **Run Agent Cycle** in the dashboard header. The server-side proposal desk uses Groq + Llama 3.3 70B by default, Claude Haiku as an optional fallback, and deterministic templates only when no LLM runtime is available.
 3. The **proposal modal** shows the call (market, side, confidence, stake, entry → target, sources). Click **Publish** to commit to Arc: USDC `approve` → `createSignal` → onchain confirmation, with an arcscan link in the success banner.
-4. Once the signal expires, click **Resolve** in the Signal Book. The resolver settles it onchain, the contract pays back stake on a win, and the agent's reputation updates against the contract formula.
+4. Once the signal expires, the bearer-authenticated resolver settles it onchain, the contract pays back stake on a win, and the agent's reputation updates against the contract formula.
 5. The **Settlement** and **Resolver Log** pages, plus the notifications bell, surface every settlement with its arcscan tx link.
 
 ## Why this fits Agora
@@ -20,13 +20,13 @@ AI agents are becoming economic actors, but the rails for accountability don't e
 - **Discovery** — Agent Book + ranked Agents page; signals are filterable by status and market.
 - **Transaction** — Real `createSignal` + `resolveSignal` on Arc, USDC-staked. ~$0.01 fees, sub-second finality.
 - **Reputation** — `getScore(agentId)` returns the canonical reputation. The dashboard's offchain `calculateScore` mirrors the contract formula exactly (`winRateBps + cumPnL/4`) so the UI never drifts from chain state.
-- **AI agents** — `proposeSignal` is implemented as an LLM tool call on the server (`/api/agent-scan`). Default provider is **Groq + Llama 3.3 70B** (free tier, sub-second), with **Claude Haiku 4.5** as an alternative when `ANTHROPIC_API_KEY` is set. Falls back to deterministic templates if neither is configured. The response includes an `agentRuntime` field so judges can verify which path served the proposal.
+- **AI agents** — `proposeSignal` is implemented as a structured LLM call on the server (`/api/agent-scan`). Default provider is **Groq + Llama 3.3 70B** (free tier, sub-second), with **Claude Haiku 4.5** as an alternative when `ANTHROPIC_API_KEY` is set. Falls back to deterministic templates if neither is configured. The response includes an `agentRuntime` field so judges can verify which path served the proposal.
 
 ## Tech stack
 
 - **Frontend** — Next.js 16 (App Router, route groups), React 19, Tailwind v4 (CSS-variable tokens), Recharts, Lucide icons.
-- **Onchain** — Solidity 0.8.30 (`SignalBond.sol`, `MockUSDC.sol`), viem 2.x for RPC and wallet flows.
-- **Agent runtime** — Groq SDK (`groq-sdk`, default) or Anthropic SDK (`@anthropic-ai/sdk`) with tool-use for structured proposals; Anthropic uses prompt caching on the static system blocks.
+- **Onchain** — Solidity 0.8.30 (`SignalBond.sol`), real Arc Testnet USDC, viem 2.x for RPC and wallet flows.
+- **Agent runtime** — Groq SDK (`groq-sdk`, default) or Anthropic SDK (`@anthropic-ai/sdk`) with structured proposals; Anthropic uses prompt caching on the static system blocks.
 - **RPC** — Canteen Arc node (server-side, keyed) with public Arc fallback for browser writes.
 
 ## Run locally
@@ -51,23 +51,26 @@ npm run compile:contracts
 | `ANTHROPIC_API_KEY` | Server only | Alternative paid path. Enables Claude Haiku 4.5 proposals. Used only if `GROQ_API_KEY` is unset (or via `?provider=anthropic`). |
 | `GROQ_MODEL` | Server only | Optional. Defaults to `llama-3.3-70b-versatile`. |
 | `ARC_RPC_URL` | Server only | Canteen Arc RPC (keyed). Do **not** expose via `NEXT_PUBLIC_*`. |
+| `RESOLVER_PRIVATE_KEY` | Server only | Wallet authorized as contract resolver/owner for automated settlement. |
+| `CRON_SECRET` | Server only | Required bearer token for resolver execution via Vercel Cron/operator calls. |
 | `NEXT_PUBLIC_ARC_CHAIN_ID` | Browser | Defaults to `5042002`. |
 | `NEXT_PUBLIC_SIGNALBOND_ADDRESS` | Browser | Deployed `SignalBond` address. |
-| `NEXT_PUBLIC_DEMO_USDC_ADDRESS` | Browser | Deployed `MockUSDC` address. |
+| `NEXT_PUBLIC_USDC_ADDRESS` | Browser | Optional override. Defaults to real Arc Testnet USDC from Circle App Kit. |
+| `NEXT_PUBLIC_DEMO_USDC_ADDRESS` | Browser | Legacy alias honored only as an override during migration. |
 | `NEXT_PUBLIC_ARC_EXPLORER` | Browser | Optional. Defaults to `https://testnet.arcscan.app`. |
 
 Without any LLM key set, `/api/agent-scan` still works — it serves deterministic templates so the UI stays demoable. Production responses include an `agentRuntime` field (`groq:llama-3.3-70b-versatile` / `claude-haiku-4-5` / `deterministic-scan-v1`) so judges can verify which path is live.
 
 ## Arc deployment
 
-Compile and deploy `MockUSDC` + `SignalBond`:
+Compile and deploy `SignalBond` against real Arc Testnet USDC:
 
 ```bash
 npm run compile:contracts
 DEPLOYER_PRIVATE_KEY=0x... npm run deploy:demo
 ```
 
-The deploy script prints the four `NEXT_PUBLIC_*` values plus `ARC_RPC_URL`. Set them in Vercel and redeploy. The dashboard automatically switches from local simulation to wallet-backed onchain publishing.
+The deploy script defaults `STAKE_TOKEN_ADDRESS` to Arc Testnet USDC (`0x3600000000000000000000000000000000000000`) and prints the public Vercel values. Set `NEXT_PUBLIC_SIGNALBOND_ADDRESS`, `NEXT_PUBLIC_ARC_CHAIN_ID`, `ARC_RPC_URL`, `RESOLVER_PRIVATE_KEY`, and `CRON_SECRET` in Vercel, then redeploy. The dashboard automatically switches from local simulation to wallet-backed onchain publishing.
 
 Arc Testnet through Canteen's RPC node (recommended):
 
@@ -108,9 +111,9 @@ app/
     followed-agents/          /followed-agents          Placeholder for wallet-bound following
 
   components/dashboard/
-    DashboardProvider.tsx     Client context — wallet, signals, proposals, settlement; orchestrates connect/claim/runAgentCycle/publishProposal/resolveSignal
+    DashboardProvider.tsx     Client context — wallet, signals, proposals, settlement; orchestrates connect/faucet/runAgentCycle/publishProposal/resolveSignal
     DashboardLayout.tsx       Client shell — Sidebar + Topbar + mobile drawer state
-    Sidebar.tsx               Routing nav + connect/claim card
+    Sidebar.tsx               Routing nav + connect/faucet card
     Topbar.tsx                Search, theme toggle, notifications, wallet pill
     ProposalModal.tsx         Reasoning preview + Publish (approve → createSignal → wait)
     SignalDetailDrawer.tsx    Per-signal proof view with arcscan links
@@ -121,9 +124,10 @@ app/
 
   lib/
     agent-scan.ts             Deterministic template generator (fallback)
-    agent-scan-llm.ts         Claude Haiku tool-use proposer with prompt caching
-    agent-scan-groq.ts        Groq + Llama 3.3 70B tool-use proposer (default)
-    dashboard-actions.ts      viem-based contract calls (publish/resolve/claim/ensureArc)
+    agent-scan-llm.ts         Claude Haiku structured proposer with prompt caching
+    agent-scan-groq.ts        Groq + Llama 3.3 70B structured proposer (default)
+    agent-scan-schema.ts      Shared schema + coercion for LLM proposal fields
+    dashboard-actions.ts      viem-based contract calls (publish/resolve/ensureArc)
     chain-state.ts            Server-side initial dashboard read
     onchain.ts                Public client + waitForOnchainTx + agentHash
     reputation.ts             Mirrors contract reputation formula
@@ -138,13 +142,13 @@ app/
   api/
     agent-scan/route.ts       LLM-first signal proposal, deterministic fallback
     chain-state/route.ts      Browser refresh endpoint
+    resolve/route.ts          Dry-run resolver preview; bearer-authenticated execution
 
 contracts/
   SignalBond.sol              Stake escrow, resolver-gated settlement, reputation accounting
-  MockUSDC.sol                Demo stake token with one-shot claim faucet
 
 scripts/
-  deploy-demo.ts              Deploy MockUSDC + SignalBond
+  deploy-demo.ts              Deploy SignalBond against Arc Testnet USDC by default
   deploy-signalbond.ts        Just the SignalBond contract
   seed-demo-signals.ts        Optional onchain seed
 ```

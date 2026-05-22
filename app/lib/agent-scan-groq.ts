@@ -1,8 +1,12 @@
 import Groq from "groq-sdk";
 import { keccak256, stringToHex } from "viem";
 import type { AgentScan } from "./agent-scan";
+import {
+  normalizeProposeSignalArgs,
+  proposeSignalParameters,
+  type ProposeSignalArgs,
+} from "./agent-scan-schema";
 import { agents as seedAgents, marketTape } from "./seed";
-import type { Direction } from "./types";
 
 const MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
 
@@ -18,85 +22,6 @@ const AGENT_ROSTER_BLOCK = `Agent roster:\n${seedAgents
       `- id="${a.id}" handle="${a.handle}" desk="${a.desk}" risk=${a.risk} markets=[${a.markets.join(", ")}]\n  thesis: ${a.thesis}`,
   )
   .join("\n")}`;
-
-type ProposeSignalArgs = {
-  agentId: string;
-  market: string;
-  venue: string;
-  direction: Direction;
-  confidenceBps: number;
-  stakeUsdc: number;
-  entryPrice: number;
-  targetPrice: number;
-  reasoning: string;
-  sources: string[];
-  windowHours: number;
-};
-
-const proposeSignalParameters = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "agentId",
-    "market",
-    "venue",
-    "direction",
-    "confidenceBps",
-    "stakeUsdc",
-    "entryPrice",
-    "targetPrice",
-    "reasoning",
-    "sources",
-    "windowHours",
-  ],
-  properties: {
-    agentId: {
-      type: "string",
-      enum: seedAgents.map((a) => a.id),
-      description: "Which agent is publishing this call.",
-    },
-    market: { type: "string", description: "Short label for the market or contract." },
-    venue: { type: "string", description: "Where the trade settles or quotes from." },
-    direction: {
-      type: "string",
-      enum: ["LONG", "SHORT", "YES", "NO"],
-      description: "Side of the call.",
-    },
-    confidenceBps: {
-      type: "integer",
-      minimum: 1,
-      maximum: 10000,
-      description: "Conviction in basis points.",
-    },
-    stakeUsdc: {
-      type: "integer",
-      minimum: 200,
-      maximum: 800,
-      description: "Stake in whole USDC.",
-    },
-    entryPrice: { type: "number", description: "Entry price for the position." },
-    targetPrice: { type: "number", description: "Target/payoff price." },
-    reasoning: {
-      type: "string",
-      minLength: 60,
-      maxLength: 600,
-      description: "One-paragraph desk memo explaining the call.",
-    },
-    sources: {
-      type: "array",
-      items: { type: "string" },
-      minItems: 2,
-      maxItems: 5,
-      description: "Short data-source tags the agent leaned on.",
-    },
-    windowHours: {
-      type: "integer",
-      minimum: 1,
-      maximum: 96,
-      description: "How long the signal stays open before resolution.",
-    },
-  },
-};
 
 export function groqConfigured(): boolean {
   return Boolean(process.env.GROQ_API_KEY);
@@ -150,9 +75,9 @@ export async function generateAgentScanWithGroq({
     throw new Error("LLM did not call proposeSignal.");
   }
 
-  let args: ProposeSignalArgs;
+  let rawArgs: unknown;
   try {
-    args = JSON.parse(toolCall.function.arguments) as ProposeSignalArgs;
+    rawArgs = JSON.parse(toolCall.function.arguments);
   } catch (error) {
     throw new Error(
       `Could not parse proposeSignal arguments: ${
@@ -161,9 +86,7 @@ export async function generateAgentScanWithGroq({
     );
   }
 
-  if (!seedAgents.some((a) => a.id === args.agentId)) {
-    throw new Error(`LLM picked unknown agentId: ${args.agentId}`);
-  }
+  const args: ProposeSignalArgs = normalizeProposeSignalArgs(rawArgs);
 
   const generatedAt = now.toISOString();
   const expiresAt = new Date(

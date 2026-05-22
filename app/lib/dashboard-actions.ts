@@ -296,8 +296,16 @@ export async function fetchAgentScan(
       throw new Error(`Agent scan failed with ${response.status}.`);
     }
 
-    const payload = (await response.json()) as { signal: AgentScan };
-    return payload.signal;
+    const payload = (await response.json()) as {
+      agentRuntime?: string;
+      fallback?: boolean;
+      signal: AgentScan;
+    };
+    return {
+      ...payload.signal,
+      agentRuntime: payload.agentRuntime,
+      fallback: payload.fallback,
+    };
   } catch {
     return generateAgentScan({ sequence, expiresInSeconds: options.expiresInSeconds });
   }

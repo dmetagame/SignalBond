@@ -21,6 +21,7 @@ export default function ProposalModal() {
     busy,
     walletAddress,
     walletBalanceUsdc,
+    connectWallet,
     publishProposal,
     dismissProposal,
   } = useDashboard();
@@ -53,6 +54,11 @@ export default function ProposalModal() {
   const label = stageLabel[publishStage] ?? "Publish to Arc";
   const needsWallet = !walletAddress;
   const quickDemo = agentProposalMode === "quick-demo";
+  const runtimeLabel = agentProposal.agentRuntime
+    ? agentProposal.fallback
+      ? `${agentProposal.agentRuntime} fallback`
+      : agentProposal.agentRuntime
+    : undefined;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal>
@@ -81,6 +87,7 @@ export default function ProposalModal() {
               <p className="text-xs text-muted">
                 {quickDemo ? "Quick lifecycle demo" : "Generated"}{" "}
                 {new Date(agentProposal.generatedAt).toLocaleString()}
+                {runtimeLabel ? ` · ${runtimeLabel}` : ""}
               </p>
             </div>
           </div>
@@ -196,11 +203,13 @@ export default function ProposalModal() {
             <button
               type="button"
               onClick={() =>
-                publishProposal(
-                  stakeIsValid && parsedStake !== agentProposal.stakeUsdc
-                    ? { stakeUsdc: parsedStake }
-                    : undefined,
-                )
+                needsWallet
+                  ? connectWallet()
+                  : publishProposal(
+                      stakeIsValid && parsedStake !== agentProposal.stakeUsdc
+                        ? { stakeUsdc: parsedStake }
+                        : undefined,
+                    )
               }
               disabled={publishing || !stakeIsValid}
               title={!stakeIsValid ? "Enter a stake between 1 and 100,000 USDC" : undefined}
@@ -211,7 +220,7 @@ export default function ProposalModal() {
               ) : (
                 <CheckCircle2 className="size-3.5" strokeWidth={2.5} />
               )}
-              {needsWallet ? "Save locally" : "Publish"}
+              {needsWallet ? "Connect wallet" : "Publish"}
             </button>
           </div>
         </footer>

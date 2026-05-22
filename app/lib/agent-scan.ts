@@ -15,6 +15,8 @@ export type AgentScan = {
   sourceHash: Hex;
   generatedAt: string;
   expiresAt: string;
+  agentRuntime?: string;
+  fallback?: boolean;
 };
 
 type ScanTemplate = Omit<AgentScan, "generatedAt" | "expiresAt" | "sourceHash"> & {

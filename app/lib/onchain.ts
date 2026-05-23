@@ -26,6 +26,9 @@ const TX_CONFIRMATION_TIMEOUT_MS = 45_000;
 const signalCreatedEvent = parseAbiItem(
   "event SignalCreated(uint256 indexed signalId, bytes32 indexed agentId, address indexed publisher, string market, uint8 direction, uint16 confidenceBps, uint256 stakeAmount, uint64 expiresAt, uint256 entryPriceE8, uint256 targetPriceE8, bytes32 sourceDataHash, bytes32 explanationHash)",
 );
+const signalResolvedEvent = parseAbiItem(
+  "event SignalResolved(uint256 indexed signalId, bytes32 indexed agentId, bool correct, int256 pnlBps, int256 reputation)",
+);
 
 type ContractSignal = {
   id: bigint;
@@ -190,6 +193,15 @@ export async function readOnchainDashboard(
       toBlock: blockNumber,
     }),
   ]);
+  const contractSignals = rawSignals.map(toContractSignal);
+  const settledSignalIds = contractSignals
+    .filter((signal) => signal.resolved)
+    .map((signal) => Number(signal.id));
+  const resolvedLogs = await readSignalResolvedLogs(publicClient, bondAddress, {
+    fromBlock: logFromBlock,
+    requiredSignalIds: settledSignalIds,
+    toBlock: blockNumber,
+  });
 
   const txBySignalId = new Map<number, Hex>();
   for (const log of createdLogs) {
@@ -198,9 +210,23 @@ export async function readOnchainDashboard(
       txBySignalId.set(Number(signalId), log.transactionHash);
     }
   }
+  const settlementTxBySignalId = new Map<number, Hex>();
+  for (const log of resolvedLogs) {
+    const signalId = log.args.signalId;
+    if (signalId !== undefined) {
+      settlementTxBySignalId.set(Number(signalId), log.transactionHash);
+    }
+  }
 
-  const signals = rawSignals
-    .map((raw) => contractSignalToSignal(toContractSignal(raw), agentHashes, txBySignalId))
+  const signals = contractSignals
+    .map((signal) =>
+      contractSignalToSignal(
+        signal,
+        agentHashes,
+        txBySignalId,
+        settlementTxBySignalId,
+      ),
+    )
     .sort((a, b) => (b.onchainId ?? 0) - (a.onchainId ?? 0));
 
   const stakeByAgent = new Map<string, number>();
@@ -260,6 +286,7 @@ function contractSignalToSignal(
   signal: ContractSignal,
   agentHashes: Map<Hex, string>,
   txBySignalId: Map<number, Hex>,
+  settlementTxBySignalId: Map<number, Hex>,
 ): Signal {
   const id = Number(signal.id);
   const knownAgentId = agentHashes.get(signal.agentId);
@@ -284,6 +311,7 @@ function contractSignalToSignal(
     correct: signal.resolved ? signal.correct : undefined,
     sourceHash: signal.sourceDataHash,
     txHash: txBySignalId.get(id) ?? signal.sourceDataHash,
+    settlementTxHash: signal.resolved ? settlementTxBySignalId.get(id) : undefined,
     publisher: signal.publisher,
     reasoning:
       "This signal is loaded from SignalBond contract storage. Source data and thesis hashes are anchored on Arc for auditability.",
@@ -341,6 +369,58 @@ async function readSignalCreatedLogs(
       }
     }
     if (requiredIds.size === 0 || boundedFromBlock === 0n) {
+      break;
+    }
+
+    chunkToBlock = boundedFromBlock - 1n;
+  }
+
+  return logs;
+}
+
+async function readSignalResolvedLogs(
+  publicClient: ReturnType<typeof getPublicClient>,
+  bondAddress: Address,
+  {
+    fromBlock,
+    requiredSignalIds,
+    toBlock,
+  }: {
+    fromBlock: bigint;
+    requiredSignalIds: number[];
+    toBlock: bigint;
+  },
+) {
+  if (requiredSignalIds.length === 0) {
+    return [];
+  }
+
+  const logs: Array<{
+    args: { signalId?: bigint };
+    transactionHash: Hex;
+  }> = [];
+  const pendingIds = new Set(requiredSignalIds);
+
+  let chunkToBlock = toBlock;
+  while (chunkToBlock >= fromBlock) {
+    const chunkFromBlock =
+      chunkToBlock > LOG_CHUNK_BLOCKS ? chunkToBlock - LOG_CHUNK_BLOCKS : 0n;
+    const boundedFromBlock = chunkFromBlock < fromBlock ? fromBlock : chunkFromBlock;
+    const chunk = await publicClient.getLogs({
+      address: bondAddress,
+      event: signalResolvedEvent,
+      fromBlock: boundedFromBlock,
+      toBlock: chunkToBlock,
+    });
+    logs.push(...chunk);
+
+    for (const log of chunk) {
+      const signalId = log.args.signalId;
+      if (signalId !== undefined) {
+        pendingIds.delete(Number(signalId));
+      }
+    }
+    if (pendingIds.size === 0 || boundedFromBlock === 0n) {
       break;
     }
 

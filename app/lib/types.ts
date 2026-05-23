@@ -39,6 +39,7 @@ export type Signal = {
   correct?: boolean;
   sourceHash: `0x${string}`;
   txHash: `0x${string}`;
+  settlementTxHash?: `0x${string}`;
   publisher?: `0x${string}`;
   reasoning: string;
   sources: string[];

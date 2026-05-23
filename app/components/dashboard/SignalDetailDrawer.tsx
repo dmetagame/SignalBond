@@ -3,11 +3,14 @@
 import {
   ArrowUpRight,
   CalendarClock,
+  CheckCircle2,
   CircleDollarSign,
   FileKey2,
   Gavel,
   Hash,
   Landmark,
+  LockKeyhole,
+  RefreshCw,
   ShieldCheck,
   Target,
   X,
@@ -52,6 +55,7 @@ export default function SignalDetailDrawer() {
     new Date(selectedSignal.expiresAt).getTime() > nowMs;
   const canResolve = selectedSignal.status === "active" && !busy.onchain && !settlementLocked;
   const unlockMs = new Date(selectedSignal.expiresAt).getTime() - nowMs;
+  const publishTxIndexed = hasIndexedPublishTx(selectedSignal);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal>
@@ -105,13 +109,36 @@ export default function SignalDetailDrawer() {
           </div>
 
           <section className="mt-6">
+            <SectionTitle title="Lifecycle Ledger" />
+            <LifecycleLedger
+              signal={selectedSignal}
+              settlementLocked={settlementLocked}
+              unlockMs={unlockMs}
+            />
+          </section>
+
+          <section className="mt-6">
             <SectionTitle title="Arc Proof" />
             <div className="mt-3 divide-y divide-line-soft rounded-2xl border border-line-soft">
-              <ProofLink
-                label="Publish transaction"
-                value={shortHash(selectedSignal.txHash)}
-                href={arcTxUrl(selectedSignal.txHash)}
-              />
+              {publishTxIndexed ? (
+                <ProofLink
+                  label="Publish transaction"
+                  value={shortHash(selectedSignal.txHash)}
+                  href={arcTxUrl(selectedSignal.txHash)}
+                />
+              ) : (
+                <ProofValue label="Publish transaction" value="Not indexed" />
+              )}
+              {selectedSignal.settlementTxHash && (
+                <ProofLink
+                  label="Settlement transaction"
+                  value={shortHash(selectedSignal.settlementTxHash)}
+                  href={arcTxUrl(selectedSignal.settlementTxHash)}
+                />
+              )}
+              {selectedSignal.status === "settled" && !selectedSignal.settlementTxHash && (
+                <ProofValue label="Settlement transaction" value="Not indexed" />
+              )}
               {signalBondAddress && (
                 <ProofLink
                   label="SignalBond contract"
@@ -239,6 +266,157 @@ function Metric({ icon: Icon, label, value }: { icon: LucideIcon; label: string;
 
 function SectionTitle({ title }: { title: string }) {
   return <h3 className="text-xs font-semibold uppercase text-faint">{title}</h3>;
+}
+
+function LifecycleLedger({
+  signal,
+  settlementLocked,
+  unlockMs,
+}: {
+  signal: Signal;
+  settlementLocked: boolean;
+  unlockMs: number;
+}) {
+  const settled = signal.status === "settled";
+  const settlementReady = signal.status === "active" && !settlementLocked;
+  const publishTxIndexed = hasIndexedPublishTx(signal);
+  const settlementHref = signal.settlementTxHash ? arcTxUrl(signal.settlementTxHash) : undefined;
+  const settlementTxLabel = signal.settlementTxHash
+    ? shortHash(signal.settlementTxHash)
+    : undefined;
+
+  const rows: LifecycleRow[] = [
+    {
+      icon: CheckCircle2,
+      title: "Published",
+      body: `${formatUsdc(signal.stakeUsdc)} escrowed from the publisher wallet.`,
+      meta: formatDateTime(signal.createdAt),
+      tone: "complete",
+      href: publishTxIndexed ? arcTxUrl(signal.txHash) : undefined,
+      linkLabel: publishTxIndexed ? shortHash(signal.txHash) : undefined,
+    },
+    {
+      icon: settlementLocked ? LockKeyhole : CalendarClock,
+      title: settled ? "Resolution Window" : "Settlement Window",
+      body: settled
+        ? `Signal expired at ${formatDateTime(signal.expiresAt)} before resolver finalization.`
+        : settlementLocked
+          ? `Resolver unlocks after ${formatDateTime(signal.expiresAt)}.`
+          : "Ready for resolver or owner finalization.",
+      meta: settled ? "Expired" : settlementLocked ? formatCountdown(unlockMs) : "Ready",
+      tone: settled || settlementReady ? "complete" : "pending",
+    },
+    {
+      icon: Gavel,
+      title: "Settlement",
+      body: settled
+        ? signal.correct
+          ? `${formatUsdc(signal.stakeUsdc)} returned to the publisher wallet.`
+          : "No second wallet debit; the escrowed stake moved into the slashed reserve."
+        : "Pending resolver transaction on Arc.",
+      meta: settled
+        ? `${signal.correct ? "Correct" : "Incorrect"} · ${formatBps(signal.pnlBps ?? 0)}`
+        : settlementReady
+          ? "Callable"
+          : "Waiting",
+      tone: settled ? (signal.correct ? "success" : "danger") : settlementReady ? "pending" : "muted",
+      href: settlementHref,
+      linkLabel: settlementTxLabel,
+    },
+    {
+      icon: signal.correct === false ? CircleDollarSign : RefreshCw,
+      title: settled ? "Balance + Reputation" : "Projected Impact",
+      body: settled
+        ? signal.correct
+          ? "Publisher balance increases from the returned escrow; agent reputation is updated onchain."
+          : `${formatUsdc(signal.stakeUsdc)} remains captured in contract reserve; agent reputation is updated onchain.`
+        : "Projected win/loss effects are shown below until this signal is settled.",
+      meta: settled ? "Final" : "Preview",
+      tone: settled ? (signal.correct ? "success" : "danger") : "muted",
+    },
+  ];
+
+  return (
+    <div className="mt-3 overflow-hidden rounded-2xl border border-line-soft">
+      {rows.map((row, index) => (
+        <LedgerRow key={`${row.title}-${index}`} row={row} isLast={index === rows.length - 1} />
+      ))}
+    </div>
+  );
+}
+
+type LifecycleRow = {
+  icon: LucideIcon;
+  title: string;
+  body: string;
+  meta: string;
+  tone: "complete" | "pending" | "muted" | "success" | "danger";
+  href?: string;
+  linkLabel?: string;
+};
+
+function LedgerRow({ row, isLast }: { row: LifecycleRow; isLast: boolean }) {
+  const toneClass = ledgerToneClass(row.tone);
+  const Icon = row.icon;
+
+  return (
+    <div
+      className={[
+        "grid grid-cols-[2rem_1fr] gap-3 bg-panel px-3 py-3",
+        isLast ? "" : "border-b border-line-soft",
+      ].join(" ")}
+    >
+      <div className="relative flex justify-center">
+        {!isLast && <span className="absolute top-8 h-[calc(100%-1.25rem)] w-px bg-line-soft" />}
+        <span
+          className={[
+            "relative z-10 flex size-8 items-center justify-center rounded-lg border",
+            toneClass,
+          ].join(" ")}
+        >
+          <Icon className="size-4" strokeWidth={2} />
+        </span>
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-text">{row.title}</div>
+            <p className="mt-1 text-xs leading-relaxed text-muted">{row.body}</p>
+          </div>
+          <span className="shrink-0 rounded-md bg-panel-muted px-2 py-0.5 font-mono text-[11px] text-faint">
+            {row.meta}
+          </span>
+        </div>
+        {row.href && row.linkLabel && (
+          <a
+            href={row.href}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-text hover:text-accent"
+          >
+            {row.linkLabel}
+            <ArrowUpRight className="size-3.5 text-faint" strokeWidth={2} />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ledgerToneClass(tone: LifecycleRow["tone"]): string {
+  switch (tone) {
+    case "success":
+      return "border-success/30 bg-success-soft text-success";
+    case "danger":
+      return "border-danger/30 bg-danger-soft text-danger";
+    case "pending":
+      return "border-accent/30 bg-accent-soft text-accent";
+    case "complete":
+      return "border-line-soft bg-panel-muted text-text";
+    case "muted":
+    default:
+      return "border-line-soft bg-panel-muted text-faint";
+  }
 }
 
 function ProofLink({ label, value, href }: { label: string; value: string; href: string }) {
@@ -373,4 +551,17 @@ function estimatePnlBps(signal: Signal, correct: boolean): number {
 function signedNumber(value: number): string {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(1)}`;
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function hasIndexedPublishTx(signal: Signal): boolean {
+  return signal.txHash.toLowerCase() !== signal.sourceHash.toLowerCase();
 }

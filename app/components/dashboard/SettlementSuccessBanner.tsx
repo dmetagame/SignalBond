@@ -1,6 +1,15 @@
 "use client";
 
-import { ArrowUpRight, BadgeCheck, Gavel, LineChart, Trophy, X, type LucideIcon } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  CircleDollarSign,
+  Gavel,
+  LineChart,
+  Trophy,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useDashboard } from "./DashboardProvider";
 import { shortHash } from "../../lib/dashboard-actions";
 import { arcTxUrl } from "../../lib/explorer";
@@ -12,6 +21,8 @@ export default function SettlementSuccessBanner() {
 
   const scoreDelta = settlementSuccess.reputationAfter - settlementSuccess.reputationBefore;
   const winRateDelta = settlementSuccess.winRateAfter - settlementSuccess.winRateBefore;
+  const walletBalanceDelta = settlementSuccess.walletBalanceDeltaUsdc;
+  const hasWalletBalanceDelta = walletBalanceDelta !== undefined;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-line bg-panel shadow-card">
@@ -40,13 +51,20 @@ export default function SettlementSuccessBanner() {
               {formatBps(settlementSuccess.pnlBps)} realized PnL on a{" "}
               {formatUsdc(settlementSuccess.stakeUsdc)} stake.{" "}
               {settlementSuccess.correct
-                ? "The stake was returned to the publisher."
-                : "The losing stake was moved into the slashed reserve."}
+                ? "The publisher balance increases when the escrowed stake is returned."
+                : "Losses do not subtract again at settlement; the stake left the wallet at publish and is now in the slashed reserve."}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+        <div
+          className={[
+            "grid grid-cols-2 gap-2",
+            hasWalletBalanceDelta
+              ? "sm:grid-cols-5 lg:min-w-[640px]"
+              : "sm:grid-cols-4 lg:min-w-[520px]",
+          ].join(" ")}
+        >
           <Metric
             icon={BadgeCheck}
             label="Resolved"
@@ -58,6 +76,13 @@ export default function SettlementSuccessBanner() {
             value={signedPercent(winRateDelta)}
           />
           <Metric icon={Trophy} label="Reputation" value={signedNumber(scoreDelta)} />
+          {hasWalletBalanceDelta && (
+            <Metric
+              icon={CircleDollarSign}
+              label="Wallet"
+              value={signedUsdc(walletBalanceDelta)}
+            />
+          )}
           <a
             href={arcTxUrl(settlementSuccess.txHash)}
             target="_blank"
@@ -107,4 +132,10 @@ function signedNumber(value: number): string {
 function signedPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${(value * 100).toFixed(1)}%`;
+}
+
+function signedUsdc(value: number): string {
+  if (value === 0) return formatUsdc(0);
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatUsdc(value)}`;
 }

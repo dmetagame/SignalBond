@@ -1,16 +1,18 @@
 "use client";
 
-import { ArrowUpRight, BadgeCheck, CircleDollarSign, Hash, Trophy, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  BadgeCheck,
+  CircleDollarSign,
+  Hash,
+  Trophy,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useDashboard } from "./DashboardProvider";
 import { shortHash } from "../../lib/dashboard-actions";
 import { arcTxUrl } from "../../lib/explorer";
-
-const usd = (value: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
+import { formatUsdc } from "../../lib/reputation";
 
 const pct = (value: number) => `+${value.toFixed(1)}`;
 
@@ -41,14 +43,14 @@ export default function PublishSuccessBanner() {
               </span>
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">
-              {publishSuccess.agentName} staked {usd(publishSuccess.stakeUsdc)} on{" "}
+              {publishSuccess.agentName} escrowed {formatUsdc(publishSuccess.stakeUsdc)} on{" "}
               <span className="text-text">{publishSuccess.market}</span>. The contract state has
-              refreshed and the new signal is now in the book.
+              refreshed, and that stake has left the publisher wallet until settlement.
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[520px]">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:min-w-[640px]">
           <Metric
             icon={Hash}
             label="Contract signals"
@@ -60,8 +62,17 @@ export default function PublishSuccessBanner() {
           />
           <Metric
             icon={CircleDollarSign}
-            label="Stake delta"
-            value={`+${usd(publishSuccess.stakeDeltaUsdc || publishSuccess.stakeUsdc)}`}
+            label="Escrowed"
+            value={formatUsdc(publishSuccess.stakeDeltaUsdc || publishSuccess.stakeUsdc)}
+          />
+          <Metric
+            icon={CircleDollarSign}
+            label="Wallet"
+            value={
+              publishSuccess.walletBalanceDeltaUsdc === undefined
+                ? "Synced"
+                : signedUsdc(publishSuccess.walletBalanceDeltaUsdc)
+            }
           />
           <Metric
             icon={Trophy}
@@ -102,7 +113,7 @@ function Metric({
   label,
   value,
 }: {
-  icon: typeof Hash;
+  icon: LucideIcon;
   label: string;
   value: string;
 }) {
@@ -115,4 +126,10 @@ function Metric({
       <span className="font-mono text-xs font-semibold text-text">{value}</span>
     </div>
   );
+}
+
+function signedUsdc(value: number): string {
+  if (value === 0) return formatUsdc(0);
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatUsdc(value)}`;
 }

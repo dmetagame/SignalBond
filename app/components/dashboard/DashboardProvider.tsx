@@ -42,6 +42,9 @@ export type PublishSuccess = {
   txHash: Hex;
   contractSignalCount?: number;
   stakeDeltaUsdc: number;
+  walletBalanceBeforeUsdc?: number;
+  walletBalanceAfterUsdc?: number;
+  walletBalanceDeltaUsdc?: number;
   reputationDelta: number;
 };
 
@@ -58,6 +61,9 @@ export type SettlementSuccess = {
   winRateBefore: number;
   winRateAfter: number;
   resolvedDelta: number;
+  walletBalanceBeforeUsdc?: number;
+  walletBalanceAfterUsdc?: number;
+  walletBalanceDeltaUsdc?: number;
 };
 
 export type DashboardContextValue = {
@@ -221,6 +227,16 @@ export default function DashboardProvider({
   }, [refreshOnchainState]);
 
   useEffect(() => {
+    if (!contractsConfigured || !walletAddress) return undefined;
+
+    const interval = window.setInterval(() => {
+      void refreshOnchainState(walletAddress);
+    }, 30_000);
+
+    return () => window.clearInterval(interval);
+  }, [walletAddress, refreshOnchainState]);
+
+  useEffect(() => {
     if (typeof window === "undefined" || !window.ethereum?.on) return undefined;
 
     const handleAccountsChanged = (accounts: unknown) => {
@@ -381,6 +397,7 @@ export default function DashboardProvider({
         const agentBefore = agents.find((agent) => agent.id === proposalSignal.agentId);
         const scoreBefore = agentBefore ? calculateScore(agentBefore).reputation : undefined;
         const previousStake = agentBefore?.stakedUsdc ?? 0;
+        const walletBalanceBefore = walletBalanceUsdc;
         setPublishStage("approving");
         const txHash = await publishSignalOnchain(proposalSignal, walletAddress, (stage) =>
           setPublishStage(stage),
@@ -398,6 +415,7 @@ export default function DashboardProvider({
         const agentAfter =
           dashboard?.agents.find((agent) => agent.id === proposalSignal.agentId) ?? agentBefore;
         const scoreAfter = agentAfter ? calculateScore(agentAfter).reputation : undefined;
+        const walletBalanceAfter = dashboard?.walletBalanceUsdc;
         setPublishSuccess({
           agentName: agentAfter?.name ?? agentBefore?.name ?? proposalSignal.agentId,
           market: proposalSignal.market,
@@ -406,6 +424,12 @@ export default function DashboardProvider({
           txHash,
           contractSignalCount: dashboard?.signalCount,
           stakeDeltaUsdc: Math.max(0, (agentAfter?.stakedUsdc ?? previousStake) - previousStake),
+          walletBalanceBeforeUsdc: walletBalanceBefore,
+          walletBalanceAfterUsdc: walletBalanceAfter,
+          walletBalanceDeltaUsdc:
+            walletBalanceBefore === undefined || walletBalanceAfter === undefined
+              ? undefined
+              : walletBalanceAfter - walletBalanceBefore,
           reputationDelta:
             scoreBefore === undefined || scoreAfter === undefined
               ? 0
@@ -428,7 +452,14 @@ export default function DashboardProvider({
     setSignals((current) => [proposalSignal, ...current]);
     setAgentProposal(undefined);
     setAgentProposalMode(undefined);
-  }, [agentProposal, agentProposalMode, agents, walletAddress, refreshOnchainState]);
+  }, [
+    agentProposal,
+    agentProposalMode,
+    agents,
+    walletAddress,
+    walletBalanceUsdc,
+    refreshOnchainState,
+  ]);
 
   const dismissProposal = useCallback(() => {
     if (publishStage !== "idle") return;
@@ -489,6 +520,7 @@ export default function DashboardProvider({
           const beforeScore = agentBefore ? calculateScore(agentBefore).reputation : 0;
           const beforeWinRate = readWinRate(agentBefore);
           const beforeResolved = agentBefore?.resolvedSignals ?? 0;
+          const walletBalanceBefore = walletBalanceUsdc;
           const txHash = await resolveSignalOnchain(nextActive, walletAddress, correct, pnlBps);
           setLastOnchainTx(txHash);
           await waitForOnchainTx(txHash);
@@ -496,6 +528,7 @@ export default function DashboardProvider({
           const agentAfter =
             dashboard?.agents.find((agent) => agent.id === nextActive.agentId) ?? agentBefore;
           const afterScore = agentAfter ? calculateScore(agentAfter).reputation : beforeScore;
+          const walletBalanceAfter = dashboard?.walletBalanceUsdc;
           setSettlementSuccess({
             agentName: agentAfter?.name ?? agentBefore?.name ?? nextActive.agentId,
             market: nextActive.market,
@@ -512,6 +545,12 @@ export default function DashboardProvider({
               0,
               (agentAfter?.resolvedSignals ?? beforeResolved) - beforeResolved,
             ),
+            walletBalanceBeforeUsdc: walletBalanceBefore,
+            walletBalanceAfterUsdc: walletBalanceAfter,
+            walletBalanceDeltaUsdc:
+              walletBalanceBefore === undefined || walletBalanceAfter === undefined
+                ? undefined
+                : walletBalanceAfter - walletBalanceBefore,
           });
         } catch (error) {
           setWalletError(normalizeError(error));
@@ -570,6 +609,7 @@ export default function DashboardProvider({
       walletAddress,
       resolverAddress,
       ownerAddress,
+      walletBalanceUsdc,
       refreshOnchainState,
     ],
   );

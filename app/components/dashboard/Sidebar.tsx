@@ -65,8 +65,8 @@ const secondaryNav: NavItem[] = [
 ];
 
 const footerNav: NavItem[] = [
-  { label: "Settings", icon: Settings, href: "#" },
-  { label: "Help", icon: HelpCircle, href: "#" },
+  { label: "Settings", icon: Settings, href: "/settings" },
+  { label: "Help", icon: HelpCircle, href: "/help" },
 ];
 
 function isActive(pathname: string, href: string): boolean {

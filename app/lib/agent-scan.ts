@@ -17,6 +17,17 @@ export type AgentScan = {
   expiresAt: string;
   agentRuntime?: string;
   fallback?: boolean;
+  fallbackReason?: string;
+  provider?: "groq" | "anthropic" | "seed";
+  providerStatus?: {
+    groqConfigured: boolean;
+    anthropicConfigured: boolean;
+    selectedProvider: "groq" | "anthropic" | "seed";
+    rateLimit?: {
+      remaining: number;
+      resetAt: string;
+    };
+  };
 };
 
 type ScanTemplate = Omit<AgentScan, "generatedAt" | "expiresAt" | "sourceHash"> & {

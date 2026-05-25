@@ -19,7 +19,14 @@ import { decodePaymentRequiredHeader, decodePaymentResponseHeader } from "@x402/
 import type { PaymentRequired, SettleResponse } from "@x402/core/types";
 import { wrapFetchWithPaymentFromConfig } from "@x402/fetch";
 import { ExactEvmScheme, type ClientEvmSigner } from "@x402/evm";
-import { createWalletClient, custom, parseUnits, type Address, type Hex } from "viem";
+import {
+  createWalletClient,
+  custom,
+  parseUnits,
+  verifyTypedData,
+  type Address,
+  type Hex,
+} from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { useDashboard } from "../../components/dashboard/DashboardProvider";
 import SectionHeader from "../../components/dashboard/SectionHeader";
@@ -37,7 +44,7 @@ const SESSION_SCOPE = "createSignal, resolveSignal";
 const MAX_SESSION_STAKE_USDC = "5";
 
 type X402State = {
-  status: "idle" | "checking" | "challenge" | "paying" | "paid" | "failed";
+  status: "idle" | "checking" | "challenge" | "paying" | "signed" | "paid" | "failed";
   requirement?: PaymentRequired;
   settlement?: SettleResponse;
   response?: unknown;
@@ -52,7 +59,19 @@ type SessionGrant = {
   maxStakeUsdc: string;
   validUntil: number;
   signature: Hex;
+  verified: boolean;
 };
+
+const sessionGrantTypes = {
+  SessionGrant: [
+    { name: "owner", type: "address" },
+    { name: "sessionKey", type: "address" },
+    { name: "target", type: "address" },
+    { name: "scope", type: "string" },
+    { name: "maxStakeUsdc", type: "uint256" },
+    { name: "validUntil", type: "uint64" },
+  ],
+} as const;
 
 export default function ArcOssPage() {
   const { walletAddress, walletOnArc, connectWallet } = useDashboard();
@@ -122,10 +141,14 @@ export default function ArcOssPage() {
       const settlement = settlementHeader
         ? decodePaymentResponseHeader(settlementHeader)
         : undefined;
+      const body = await response.json();
+      const facilitatorPending =
+        response.status === 202 ||
+        response.headers.get("X-SignalBond-X402-Mode") === "facilitator-pending";
       setX402State({
-        status: response.ok ? "paid" : "failed",
+        status: response.ok ? (facilitatorPending ? "signed" : "paid") : "failed",
         settlement,
-        response: await response.json(),
+        response: body,
         error: response.ok ? undefined : `x402 request failed with ${response.status}.`,
       });
     } catch (error) {
@@ -159,33 +182,34 @@ export default function ArcOssPage() {
         chain: arcCanteen,
         transport: custom(window.ethereum),
       });
+      const domain = {
+        name: "SignalBond Session Grant",
+        version: "1",
+        chainId: arcCanteen.id,
+        verifyingContract: signalBondAddress,
+      } as const;
+      const message = {
+        owner: walletAddress,
+        sessionKey: sessionAccount.address,
+        target: signalBondAddress,
+        scope: SESSION_SCOPE,
+        maxStakeUsdc: parseUnits(MAX_SESSION_STAKE_USDC, 6),
+        validUntil: BigInt(validUntil),
+      } as const;
       const signature = await walletClient.signTypedData({
         account: walletAddress,
-        domain: {
-          name: "SignalBond Session Grant",
-          version: "1",
-          chainId: arcCanteen.id,
-          verifyingContract: signalBondAddress,
-        },
-        types: {
-          SessionGrant: [
-            { name: "owner", type: "address" },
-            { name: "sessionKey", type: "address" },
-            { name: "target", type: "address" },
-            { name: "scope", type: "string" },
-            { name: "maxStakeUsdc", type: "uint256" },
-            { name: "validUntil", type: "uint64" },
-          ],
-        },
+        domain,
+        types: sessionGrantTypes,
         primaryType: "SessionGrant",
-        message: {
-          owner: walletAddress,
-          sessionKey: sessionAccount.address,
-          target: signalBondAddress,
-          scope: SESSION_SCOPE,
-          maxStakeUsdc: parseUnits(MAX_SESSION_STAKE_USDC, 6),
-          validUntil: BigInt(validUntil),
-        },
+        message,
+      });
+      const verified = await verifyTypedData({
+        address: walletAddress,
+        domain,
+        types: sessionGrantTypes,
+        primaryType: "SessionGrant",
+        message,
+        signature,
       });
 
       setSessionGrant({
@@ -196,6 +220,7 @@ export default function ArcOssPage() {
         maxStakeUsdc: MAX_SESSION_STAKE_USDC,
         validUntil,
         signature,
+        verified,
       });
     } catch (error) {
       setSessionError(normalizeError(error));
@@ -247,7 +272,7 @@ export default function ArcOssPage() {
           <div className="rounded-xl border border-line-soft bg-panel-muted p-3 text-xs leading-relaxed text-muted">
             Arc Testnet is wired through a reusable wagmi config and viem signer at{" "}
             <span className="font-mono text-text">eip155:{arcCanteen.id}</span>. The endpoint uses
-            x402 headers today; final production settlement waits on an Arc-compatible facilitator.
+            x402 headers today; paid content unlocks only when an Arc-compatible facilitator verifies settlement.
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -275,25 +300,26 @@ export default function ArcOssPage() {
               ) : (
                 <ReceiptText className="size-4" strokeWidth={1.75} />
               )}
-              Pay with x402
+              Sign x402 payload
             </button>
           </div>
 
           <div className="mt-4 space-y-3">
             {x402State.requirement && <PaymentRequiredView requirement={x402State.requirement} />}
             {x402State.settlement && <SettlementView settlement={x402State.settlement} />}
+            {x402State.status === "signed" && <FacilitatorPendingView response={x402State.response} />}
             {x402State.error && <ErrorText message={x402State.error} />}
           </div>
         </Panel>
 
         <Panel
           icon={<KeyRound className="size-4" strokeWidth={1.75} />}
-          title="Session Key Authorization"
-          description="Generate an ephemeral signer and authorize it with a scoped EIP-712 grant for SignalBond actions."
+          title="Session Grant Prototype"
+          description="Generate an ephemeral signer, sign a scoped EIP-712 grant, and verify the owner signature locally."
         >
           <div className="rounded-xl border border-line-soft bg-panel-muted p-3 text-xs leading-relaxed text-muted">
-            The session private key is generated in memory only. The signed grant is the reusable artifact;
-            smart-account enforcement can later plug into ERC-4337/7579 validation.
+            The session private key is generated in memory only. This proves the grant signature;
+            execution still needs a smart-account or contract validation adapter.
           </div>
 
           <button
@@ -307,7 +333,7 @@ export default function ArcOssPage() {
             ) : (
               <LockKeyhole className="size-4" strokeWidth={1.75} />
             )}
-            Authorize session
+            Sign grant
           </button>
 
           <div className="mt-4">
@@ -342,7 +368,7 @@ export default function ArcOssPage() {
         description="This is the shape other Arc builders can lift for prediction markets, identity, escrow, or yield-routing products."
       >
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-          {["402 challenge", "x402 payment payload", "session grant", "SignalBond escrow"].map(
+          {["402 challenge", "x402 signed payload", "verified grant", "SignalBond escrow"].map(
             (step, index) => (
               <div key={step} className="rounded-xl border border-line-soft bg-panel-muted p-3">
                 <div className="flex items-center justify-between gap-3">
@@ -442,12 +468,29 @@ function SettlementView({ settlement }: { settlement: SettleResponse }) {
     <div className="rounded-xl border border-success/30 bg-success-soft p-3">
       <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-success">
         <BadgeCheck className="size-4" strokeWidth={1.75} />
-        x402 client retry completed
+        x402 facilitator settlement verified
       </div>
-      <ValueRow label="Mode" value="Facilitator pending" />
+      <ValueRow label="Mode" value="Facilitator verified" />
       <ValueRow label="Network" value={settlement.network} />
       <ValueRow label="Amount" value={settlement.amount ?? "—"} />
       <ValueRow label="Receipt" value={shortHash(settlement.transaction)} />
+    </div>
+  );
+}
+
+function FacilitatorPendingView({ response }: { response: unknown }) {
+  const mode =
+    typeof response === "object" && response !== null && "mode" in response
+      ? String((response as { mode?: unknown }).mode)
+      : "facilitator-pending";
+  return (
+    <div className="rounded-xl border border-accent/30 bg-accent-soft p-3">
+      <div className="mb-3 flex items-center gap-2 text-xs font-semibold text-text">
+        <BadgeCheck className="size-4 text-accent" strokeWidth={1.75} />
+        x402 payload signed
+      </div>
+      <ValueRow label="Mode" value={mode} />
+      <ValueRow label="Paid content" value="Locked until facilitator verifies settlement" />
     </div>
   );
 }
@@ -465,6 +508,10 @@ function SessionGrantView({ grant }: { grant: SessionGrant }) {
       <ValueRow label="Scope" value={grant.scope} />
       <ValueRow label="Max stake" value={`${grant.maxStakeUsdc} USDC`} />
       <ValueRow label="Expires" value={new Date(grant.validUntil * 1000).toLocaleTimeString()} />
+      <ValueRow
+        label="Local verifier"
+        value={grant.verified ? "Owner signature valid" : "Signature check failed"}
+      />
       <ValueRow label="Signature" value={shortHash(grant.signature)} copyValue={grant.signature} />
     </div>
   );

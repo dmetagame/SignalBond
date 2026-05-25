@@ -310,12 +310,18 @@ export async function fetchAgentScan(
     const payload = (await response.json()) as {
       agentRuntime?: string;
       fallback?: boolean;
+      fallbackReason?: string;
+      provider?: AgentScan["provider"];
+      providerStatus?: AgentScan["providerStatus"];
       signal: AgentScan;
     };
     return {
       ...payload.signal,
       agentRuntime: payload.agentRuntime,
       fallback: payload.fallback,
+      fallbackReason: payload.fallbackReason,
+      provider: payload.provider,
+      providerStatus: payload.providerStatus,
     };
   } catch {
     return generateAgentScan({ sequence, expiresInSeconds: options.expiresInSeconds });

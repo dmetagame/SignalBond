@@ -4,13 +4,12 @@ import {
   decodePaymentSignatureHeader,
   encodePaymentRequiredHeader,
   encodePaymentResponseHeader,
+  HTTPFacilitatorClient,
 } from "@x402/core/http";
 import { arcCanteen, signalBondAddress, usdcAddress } from "../../../lib/contract";
 
 const PRICE_ATOMIC_USDC = "1000"; // 0.001 USDC
 const NETWORK = `eip155:${arcCanteen.id}` as const;
-const DEMO_SETTLEMENT_TX =
-  "0x0000000000000000000000000000000000000000000000000000000000000402";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,11 +46,76 @@ export async function GET(request: Request) {
     );
   }
 
+  const selectedRequirement = paymentRequired.accepts[0];
+  if (!selectedRequirement) {
+    return NextResponse.json(
+      { error: "No x402 payment requirement is configured." },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
+  if (!facilitatorConfigured()) {
+    return NextResponse.json(
+      {
+        resource: "SignalBond paid signal pack",
+        mode: "facilitator-pending",
+        signedBy: readPayer(payload),
+        accepted: payload.accepted,
+        paidContent: "locked",
+        note:
+          "Payment payload decoded locally. Configure X402_FACILITATOR_URL before releasing paid signal content.",
+      },
+      {
+        status: 202,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-SignalBond-X402-Mode": "facilitator-pending",
+        },
+      },
+    );
+  }
+
+  let settlement;
+  try {
+    settlement = await settleWithFacilitator(payload, selectedRequirement);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "x402 facilitator settlement failed.",
+        mode: "facilitator-settlement-failed",
+      },
+      {
+        status: 402,
+        headers: {
+          "PAYMENT-REQUIRED": encodePaymentRequiredHeader(paymentRequired),
+          "Cache-Control": "no-store",
+        },
+      },
+    );
+  }
+
+  if (!settlement.success) {
+    return NextResponse.json(
+      {
+        error: settlement.errorMessage ?? "x402 facilitator rejected payment.",
+        reason: settlement.errorReason,
+        mode: "facilitator-settlement-rejected",
+      },
+      {
+        status: 402,
+        headers: {
+          "PAYMENT-REQUIRED": encodePaymentRequiredHeader(paymentRequired),
+          "Cache-Control": "no-store",
+        },
+      },
+    );
+  }
+
   return NextResponse.json(
     {
       resource: "SignalBond paid signal pack",
-      mode: "x402-client-demo",
-      settlement: "facilitator-pending",
+      mode: "facilitator-verified",
       paidBy: readPayer(payload),
       accepted: payload.accepted,
       signals: [
@@ -69,16 +133,7 @@ export async function GET(request: Request) {
     },
     {
       headers: {
-        "PAYMENT-RESPONSE": encodePaymentResponseHeader({
-          success: true,
-          transaction: DEMO_SETTLEMENT_TX,
-          network: NETWORK,
-          amount: PRICE_ATOMIC_USDC,
-          extra: {
-            mode: "demo-no-facilitator",
-            reason: "Arc Testnet facilitator support is the remaining production dependency.",
-          },
-        }),
+        "PAYMENT-RESPONSE": encodePaymentResponseHeader(settlement),
         "Cache-Control": "no-store",
       },
     },
@@ -137,4 +192,33 @@ function buildPaymentRequired(url: string): PaymentRequired {
       },
     ],
   };
+}
+
+function facilitatorConfigured(): boolean {
+  return Boolean(process.env.X402_FACILITATOR_URL?.trim());
+}
+
+async function settleWithFacilitator(
+  paymentPayload: PaymentPayload,
+  paymentRequirement: PaymentRequired["accepts"][number],
+) {
+  const url = process.env.X402_FACILITATOR_URL?.trim();
+  if (!url) {
+    throw new Error("X402_FACILITATOR_URL is not configured.");
+  }
+
+  const apiKey = process.env.X402_FACILITATOR_API_KEY?.trim();
+  const authHeaders: Record<string, string> = apiKey
+    ? { authorization: `Bearer ${apiKey}` }
+    : {};
+  const facilitator = new HTTPFacilitatorClient({
+    url,
+    createAuthHeaders: async () => ({
+      verify: authHeaders,
+      settle: authHeaders,
+      supported: authHeaders,
+    }),
+  });
+
+  return facilitator.settle(paymentPayload, paymentRequirement);
 }

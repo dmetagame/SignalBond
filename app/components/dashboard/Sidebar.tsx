@@ -12,6 +12,7 @@ import {
   ArrowLeftRight,
   ListChecks,
   BarChart3,
+  Code2,
   Star,
   Settings,
   HelpCircle,
@@ -61,6 +62,7 @@ const onchainNav: NavItem[] = [
 
 const secondaryNav: NavItem[] = [
   { label: "Analytics", icon: BarChart3, href: "/analytics" },
+  { label: "Arc OSS", icon: Code2, href: "/arc-oss" },
   { label: "Followed Agents", icon: Star, href: "/followed-agents" },
 ];
 

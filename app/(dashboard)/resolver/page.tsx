@@ -13,10 +13,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createWalletClient, custom } from "viem";
 import SectionHeader from "../../components/dashboard/SectionHeader";
 import { useDashboard } from "../../components/dashboard/DashboardProvider";
+import { arcCanteen } from "../../lib/contract";
 import { arcAddressUrl, arcTxUrl } from "../../lib/explorer";
 import { formatBps } from "../../lib/reputation";
+import { buildResolverExecutionMessage } from "../../lib/resolver-auth-message";
 
 type Plan = {
   onchainId: number;
@@ -65,7 +68,14 @@ type ResolverPayload = {
 };
 
 export default function ResolverPage() {
-  const { agents, refreshChainState } = useDashboard();
+  const {
+    agents,
+    refreshChainState,
+    walletAddress,
+    connectWallet,
+    resolverAddress,
+    ownerAddress,
+  } = useDashboard();
   const agentMap = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
 
   const [payload, setPayload] = useState<ResolverPayload | undefined>();
@@ -73,6 +83,11 @@ export default function ResolverPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [lastRunAt, setLastRunAt] = useState<string | undefined>();
+  const walletAuthorized =
+    Boolean(walletAddress) &&
+    [resolverAddress, ownerAddress].some(
+      (address) => address?.toLowerCase() === walletAddress?.toLowerCase(),
+    );
 
   const fetchPlan = useCallback(async () => {
     setLoading(true);
@@ -100,9 +115,43 @@ export default function ResolverPage() {
     setBusy(true);
     setError(undefined);
     try {
+      if (!walletAddress) {
+        await connectWallet();
+        throw new Error(
+          "Wallet connected. Click Resolve again to sign the resolver authorization.",
+        );
+      }
+
+      if (!walletAuthorized) {
+        throw new Error("Connect the contract resolver or owner wallet to run the resolver.");
+      }
+
+      if (!window.ethereum) {
+        throw new Error("No injected wallet found.");
+      }
+
+      const origin = window.location.origin;
+      const issuedAt = Date.now();
+      const message = buildResolverExecutionMessage({ origin, issuedAt });
+      const walletClient = createWalletClient({
+        account: walletAddress,
+        chain: arcCanteen,
+        transport: custom(window.ethereum),
+      });
+      const signature = await walletClient.signMessage({
+        account: walletAddress,
+        message,
+      });
+
       const res = await fetch("/api/resolve", {
         method: "POST",
         cache: "no-store",
+        headers: {
+          "x-resolver-address": walletAddress,
+          "x-resolver-signature": signature,
+          "x-resolver-origin": origin,
+          "x-resolver-issued-at": String(issuedAt),
+        },
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
@@ -117,14 +166,24 @@ export default function ResolverPage() {
     } finally {
       setBusy(false);
     }
-  }, [refreshChainState]);
+  }, [connectWallet, refreshChainState, walletAddress, walletAuthorized]);
 
   const plans = payload?.plans ?? [];
   const executed = payload?.executed ?? [];
   const failed = payload?.failed ?? [];
   const dueCount = plans.length || executed.length;
   const mode = payload?.mode;
-  const canExecute = false;
+  const resolverRoleReady = mode !== undefined && mode !== "dry-run-no-key";
+  const canExecute = resolverRoleReady && (!walletAddress || walletAuthorized);
+  const executeTitle = !resolverRoleReady
+    ? "Set RESOLVER_PRIVATE_KEY in Vercel env to enable execution"
+    : walletAddress && !walletAuthorized
+      ? "Connected wallet is not the contract resolver or owner"
+      : !walletAddress
+        ? "Connect the contract resolver or owner wallet"
+        : dueCount === 0
+          ? "No expired signals to resolve"
+          : undefined;
 
   return (
     <div className="mx-auto flex max-w-[1400px] flex-col gap-6">
@@ -147,20 +206,16 @@ export default function ResolverPage() {
               onClick={runResolution}
               disabled={loading || busy || dueCount === 0 || !canExecute}
               className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground hover:bg-accent-strong disabled:opacity-60"
-              title={
-                !canExecute
-                  ? "Resolver execution is restricted to Vercel cron or operator bearer auth"
-                  : dueCount === 0
-                    ? "No expired signals to resolve"
-                    : undefined
-              }
+              title={executeTitle}
             >
               {busy ? (
                 <Loader2 className="size-3.5 animate-spin" strokeWidth={2.5} />
               ) : (
                 <Gavel className="size-3.5" strokeWidth={2.5} />
               )}
-              Resolve {dueCount > 0 ? `${dueCount} signal${dueCount === 1 ? "" : "s"}` : "now"}
+              {!walletAddress
+                ? "Connect resolver wallet"
+                : `Resolve ${dueCount > 0 ? `${dueCount} signal${dueCount === 1 ? "" : "s"}` : "now"}`}
             </button>
           </div>
         }

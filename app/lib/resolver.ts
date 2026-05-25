@@ -162,6 +162,9 @@ export function judgeOutcome(
   const moveBps = entry === 0 ? 0 : Math.round(((exitPrice - entry) / entry) * 10_000);
   const bullish = isBullishCall(signal.direction);
   const directionalBps = bullish ? moveBps : -moveBps;
+  // A flat market (directionalBps === 0) settles as correct — calls that pay
+  // out only on a strict move would use `> 0` here. We keep `>= 0` so a perfect
+  // hold isn't punished as a loss in the demo.
   const correct = directionalBps >= 0;
   const quoteContext = quote
     ? ` Quote: ${quote.source} observed ${new Date(quote.observedAt).toISOString()}.`
@@ -200,7 +203,7 @@ export function deterministicVerdict(signal: Signal): ResolutionVerdict {
   const correct = byte < threshold;
   const magnitude = 50 + (byte % 250); // 50–299 bps
   const bullish = isBullishCall(signal.direction);
-  const directionalBps = (correct ? magnitude : -magnitude) * (bullish ? 1 : 1);
+  const directionalBps = correct ? magnitude : -magnitude;
   const exitPrice =
     signal.entryPrice * (1 + (bullish ? directionalBps : -directionalBps) / 10_000);
   return {

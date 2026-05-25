@@ -8,7 +8,7 @@ const arcRpcUrl =
     : publicArcRpcUrl;
 
 export const arcCanteen = defineChain({
-  id: Number(process.env.NEXT_PUBLIC_ARC_CHAIN_ID ?? arcTestnetConfig.chainId),
+  id: readChainId(),
   name: arcTestnetConfig.name,
   nativeCurrency: {
     name: "USDC",
@@ -204,4 +204,15 @@ export const erc20Abi = [
 
 function readAddress(value: string | undefined): Address | undefined {
   return value && isAddress(value) ? value : undefined;
+}
+
+function readChainId(): number {
+  const fromEnv = process.env.NEXT_PUBLIC_ARC_CHAIN_ID;
+  if (fromEnv !== undefined) {
+    const parsed = Number(fromEnv);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return arcTestnetConfig.chainId;
 }

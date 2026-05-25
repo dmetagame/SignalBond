@@ -43,6 +43,26 @@ export function resolverAddress(): Address | undefined {
   }
 }
 
+export async function resolverRoleAddresses(): Promise<Address[]> {
+  if (!signalBondAddress) return [];
+
+  const publicClient = getPublicClient();
+  const [owner, resolver] = await Promise.all([
+    publicClient.readContract({
+      address: signalBondAddress,
+      abi: signalBondAbi,
+      functionName: "owner",
+    }),
+    publicClient.readContract({
+      address: signalBondAddress,
+      abi: signalBondAbi,
+      functionName: "resolver",
+    }),
+  ]);
+
+  return [owner, resolver];
+}
+
 export async function submitResolution(
   onchainId: number,
   correct: boolean,

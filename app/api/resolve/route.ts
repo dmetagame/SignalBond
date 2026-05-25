@@ -11,11 +11,13 @@ import {
 import {
   resolverAddress,
   resolverConfigured,
+  resolverRoleAddresses,
   submitResolution,
 } from "../../lib/resolver-server";
 import {
   evaluateResolverExecuteAuth,
   hasResolverBearerAuth,
+  hasResolverWalletAuthAttempt,
 } from "../../lib/resolver-auth";
 import { arcTxUrl } from "../../lib/explorer";
 
@@ -49,7 +51,8 @@ type Failure = {
 /**
  * GET — dry-run for anonymous dashboard previews, execute only for Vercel cron
  * requests carrying Authorization: Bearer ${CRON_SECRET}.
- * POST — execute for operator calls carrying the same bearer secret.
+ * POST — execute for operator calls carrying either the same bearer secret or
+ * a short-lived signature from the current contract owner/resolver wallet.
  *
  * Both routes are safe to call without RESOLVER_PRIVATE_KEY set; the executor
  * just returns dry-run results in that case so the UI can still show the plan.
@@ -70,18 +73,35 @@ export async function POST(request: Request) {
 }
 
 async function handle(request: Request, mode: "dry-run" | "execute") {
-  if (mode === "execute") {
-    const auth = evaluateResolverExecuteAuth(request);
-    if (!auth.ok) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
-  }
-
   if (!contractsConfigured) {
     return NextResponse.json(
       { error: "SignalBond contract address is not configured." },
       { status: 503 },
     );
+  }
+
+  if (mode === "execute") {
+    try {
+      const needsWalletRoles =
+        !hasResolverBearerAuth(request) && hasResolverWalletAuthAttempt(request);
+      const authorizedAddresses = needsWalletRoles
+        ? await resolverRoleAddresses()
+        : undefined;
+      const auth = await evaluateResolverExecuteAuth(request, { authorizedAddresses });
+      if (!auth.ok) {
+        return NextResponse.json({ error: auth.error }, { status: auth.status });
+      }
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? `Resolver auth check failed: ${error.message}`
+              : "Resolver auth check failed.",
+        },
+        { status: 500 },
+      );
+    }
   }
 
   try {
